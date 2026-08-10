@@ -1,0 +1,136 @@
+"""Golden preflight contracts — implementation plan Task 5, Step 5.
+
+Expected result from the plan: "identical perspective order and contract bytes across 100
+repeated runs". Byte identity, not structural similarity, because the drift these tests
+exist to catch is cosmetic-looking: a reordered set, a reworded rule, a changed budget.
+
+The pinned digests are the golden values. If one changes, that is a semantic change to
+what PRISM asks hosts to do, and it requires a reviewed registry version bump — not a
+refreshed constant.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from prism.canonical import canonical_digest, canonical_json
+from prism.contracts import PreflightRequest, PrismMode, PrismStatus
+from prism.preflight.contract import build_preflight_contract
+from prism.preflight.registry import PerspectiveRegistry
+
+ARCHITECTURE_TASK = (
+    "Assess the system design: component boundaries, coupling between services, "
+    "and the scalability tradeoff of the proposed architecture."
+)
+SECURITY_TASK = (
+    "Security review of the upload endpoint: threat model the attack surface, "
+    "check authentication and the injection vulnerability we suspect."
+)
+
+
+@pytest.fixture(scope="module")
+def registry() -> PerspectiveRegistry:
+    return PerspectiveRegistry.load()
+
+
+def build(registry: PerspectiveRegistry, task: str, mode: PrismMode) -> str:
+    return canonical_digest(
+        build_preflight_contract(PreflightRequest(task=task, mode=mode), registry)
+    )
+
+
+# --------------------------------------------------------------------------------------
+# determinism
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", list(PrismMode))
+def test_contract_bytes_are_identical_across_one_hundred_runs(
+    registry: PerspectiveRegistry, mode: PrismMode
+) -> None:
+    digests = {build(registry, ARCHITECTURE_TASK, mode) for _ in range(100)}
+    assert len(digests) == 1
+
+
+def test_a_freshly_loaded_registry_produces_the_same_contract() -> None:
+    """Determinism must survive a reload, not just a cached object."""
+    first = build(PerspectiveRegistry.load(), SECURITY_TASK, PrismMode.CRITICAL)
+    second = build(PerspectiveRegistry.load(), SECURITY_TASK, PrismMode.CRITICAL)
+    assert first == second
+
+
+def test_distinct_tasks_produce_distinct_contracts(registry: PerspectiveRegistry) -> None:
+    assert build(registry, ARCHITECTURE_TASK, PrismMode.STANDARD) != build(
+        registry, SECURITY_TASK, PrismMode.STANDARD
+    )
+
+
+# --------------------------------------------------------------------------------------
+# contract shape
+# --------------------------------------------------------------------------------------
+
+
+def test_contract_reports_registry_identity(registry: PerspectiveRegistry) -> None:
+    report = build_preflight_contract(PreflightRequest(task=ARCHITECTURE_TASK), registry)
+    assert report.registry_version == registry.version
+    assert report.registry_hash == registry.content_hash
+    assert report.status is PrismStatus.OK
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_count"),
+    [(PrismMode.LITE, 3), (PrismMode.STANDARD, 4), (PrismMode.CRITICAL, 5)],
+)
+def test_mode_controls_perspective_count(
+    registry: PerspectiveRegistry, mode: PrismMode, expected_count: int
+) -> None:
+    report = build_preflight_contract(PreflightRequest(task=ARCHITECTURE_TASK, mode=mode), registry)
+    assert len(report.perspectives) == expected_count
+
+
+def test_every_perspective_carries_purpose_questions_and_budget(
+    registry: PerspectiveRegistry,
+) -> None:
+    report = build_preflight_contract(
+        PreflightRequest(task=ARCHITECTURE_TASK, mode=PrismMode.CRITICAL), registry
+    )
+    for instruction in report.perspectives:
+        assert instruction.purpose.strip()
+        assert instruction.questions
+        assert 1 <= instruction.claim_budget <= 4
+
+
+def test_contract_states_the_source_and_untrusted_input_rules(
+    registry: PerspectiveRegistry,
+) -> None:
+    """The host is told in-band that one pass is one source, and that task text is data."""
+    report = build_preflight_contract(PreflightRequest(task=ARCHITECTURE_TASK), registry)
+    contract = report.execution_contract
+    assert "source_group_id" in contract.source_rule
+    assert "independent" in contract.source_rule.lower()
+    assert "instructions" in contract.untrusted_input_rule.lower()
+    assert contract.output == "claim_packets"
+
+
+def test_contract_does_not_echo_the_task_text(registry: PerspectiveRegistry) -> None:
+    """Echoing the task back would waste host tokens and re-present untrusted text as
+    if PRISM had endorsed it."""
+    marker = "Assess the system design"
+    report = build_preflight_contract(PreflightRequest(task=ARCHITECTURE_TASK), registry)
+    assert marker not in canonical_json(report)
+
+
+# --------------------------------------------------------------------------------------
+# token budget — success criteria table, section 2.2
+# --------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", list(PrismMode))
+def test_instruction_size_stays_within_the_token_budget(
+    registry: PerspectiveRegistry, mode: PrismMode
+) -> None:
+    """Target < 900 tokens, hard gate < 1,400. Estimated at 4 characters per token, which
+    is deliberately pessimistic for English prose."""
+    report = build_preflight_contract(PreflightRequest(task=ARCHITECTURE_TASK, mode=mode), registry)
+    estimated_tokens = len(canonical_json(report)) / 4
+    assert estimated_tokens < 1_400, f"{mode}: {estimated_tokens:.0f} estimated tokens"

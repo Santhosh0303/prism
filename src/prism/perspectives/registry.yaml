@@ -1,0 +1,143 @@
+# PRISM perspective registry.
+#
+# Canonical data, not code. A semantic change here changes routing, so it requires a
+# version bump and a golden-diff review (design section 6.3).
+#
+# risk_tags vocabulary:
+#   adversarial  - the lens tries to break or falsify the artifact
+#   constructive - the lens tries to build, serve, or assess it
+#   critical     - the lens is mandatory or near-mandatory for high-consequence work
+# Every lens is exactly one of adversarial or constructive: selection asserts that a
+# chosen set contains at least one of each, so an untagged lens would be unusable.
+
+version: "1.0.0"
+perspectives:
+  - id: systems
+    purpose: Check component boundaries, dependencies, and how the design behaves when a part fails
+    questions:
+      - Which components does this change touch and what depends on them?
+      - Where does this design break first under a single failed dependency?
+      - What is the blast radius if this component fails?
+    mutually_exclusive_with: []
+    claim_budget: 3
+    risk_tags: [constructive]
+
+  - id: security
+    purpose: Check for exploitable weaknesses in trust boundaries, inputs, and access control
+    questions:
+      - Which trust boundary does this artifact cross and what validates it?
+      - What input could an attacker control here?
+      - Which credentials or permissions does this path require?
+    mutually_exclusive_with: []
+    claim_budget: 4
+    risk_tags: [adversarial, critical]
+
+  - id: performance
+    purpose: Check throughput, latency, and resource cost under realistic load
+    questions:
+      - Where is the bottleneck under expected load?
+      - What is the latency or throughput budget for this path?
+      - Which resource does this scale worst against?
+    mutually_exclusive_with: []
+    claim_budget: 3
+    risk_tags: [constructive, critical]
+
+  - id: reliability
+    purpose: Check behaviour under fault, retry, and load conditions over time
+    questions:
+      - What happens when this dependency times out or returns an error?
+      - How does this recover after a partial failure?
+      - What is the failure rate this needs to tolerate?
+    mutually_exclusive_with: []
+    claim_budget: 3
+    risk_tags: [constructive, critical]
+
+  - id: maintainability
+    purpose: Check how easily this can be understood, changed, and tested by someone else later
+    questions:
+      - Which parts of this would confuse a new maintainer?
+      - What test or documentation is missing for this change?
+      - Where is duplicated or tangled logic that raises future change cost?
+    mutually_exclusive_with: []
+    claim_budget: 2
+    risk_tags: [constructive]
+
+  - id: user
+    purpose: Check whether this serves the actual needs and experience of the people using it
+    questions:
+      - Who is the actual user of this and what are they trying to accomplish?
+      - Where does this create confusion or extra work for the user?
+      - What happens when the user makes a mistake here?
+    mutually_exclusive_with: []
+    claim_budget: 2
+    risk_tags: [constructive]
+
+  - id: business
+    purpose: Check whether this creates value for stakeholders relative to its priority and risk
+    questions:
+      - Which stakeholder benefits from this and how?
+      - What is the opportunity cost of doing this instead of an alternative?
+      - How does this affect revenue, risk, or reputation?
+    mutually_exclusive_with: []
+    claim_budget: 2
+    risk_tags: [constructive]
+
+  - id: evidence
+    purpose: Check what data, sources, or observations actually support the claim being made
+    questions:
+      - What evidence directly supports this specific claim?
+      - Which source is this evidence drawn from and how reliable is it?
+      - What would disconfirm this claim?
+    mutually_exclusive_with: []
+    claim_budget: 3
+    risk_tags: [constructive]
+
+  - id: methodology
+    purpose: Check whether the method used could support any valid conclusion at all
+    questions:
+      - What method produced this result and what are its known limitations?
+      - Which confounds or biases could explain this result instead?
+      - What sample size or baseline does this method rely on?
+    mutually_exclusive_with: []
+    claim_budget: 3
+    risk_tags: [constructive]
+
+  - id: governance
+    purpose: Check who has authority, accountability, and approval over this decision
+    questions:
+      - Who has the authority to approve or reject this?
+      - What policy or standard governs this decision?
+      - Who is accountable if this goes wrong?
+    mutually_exclusive_with: []
+    claim_budget: 2
+    risk_tags: [constructive]
+
+  - id: cost
+    purpose: Check the resources this consumes in money, time, and effort
+    questions:
+      - What does this cost in money, time, or engineering effort?
+      - Where does the cost grow fastest as usage or scope increases?
+      - What is the cheapest alternative that meets the requirement?
+    mutually_exclusive_with: []
+    claim_budget: 2
+    risk_tags: [constructive]
+
+  - id: operations
+    purpose: Check what it takes to deploy, monitor, and support this on a daily basis
+    questions:
+      - How is this deployed and rolled back if it fails?
+      - What signal tells an operator this is unhealthy?
+      - Who is paged when this fails and what do they do first?
+    mutually_exclusive_with: []
+    claim_budget: 3
+    risk_tags: [constructive]
+
+  - id: red_team
+    purpose: Check how an adversary would deliberately misuse, bypass, or break this
+    questions:
+      - How would an adversary deliberately misuse this?
+      - What assumption does this rely on that an attacker could invalidate?
+      - What is the worst plausible outcome if this is actively attacked?
+    mutually_exclusive_with: []
+    claim_budget: 4
+    risk_tags: [adversarial, critical]
