@@ -80,7 +80,7 @@ def distribution(samples: list[float]) -> dict[str, float]:
         return {}
 
     def percentile(fraction: float) -> float:
-        index = min(len(ordered) - 1, int(round(fraction * (len(ordered) - 1))))
+        index = min(len(ordered) - 1, round(fraction * (len(ordered) - 1)))
         return ordered[index]
 
     return {
