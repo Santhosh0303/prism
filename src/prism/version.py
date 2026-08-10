@@ -26,9 +26,9 @@ MAX_SUPPORTED_SCHEMA_MAJOR: Final[int] = 1
 #: Model Context Protocol specification revision this server targets.
 MCP_PROTOCOL_VERSION: Final[str] = "2026-07-28"
 
-#: Audit baseline the implementation was built against. The three source documents are
-#: hash-anchored in docs/verification-ledger.md. A release may not regress to an older
-#: audit baseline (invariant A19, gate G21).
+#: Identifier of the design baseline this implementation was built against. It is
+#: surfaced in reports so that a result can always be traced to the specification
+#: revision that produced it. A release may not regress to an older baseline.
 AUDIT_BASELINE_ID: Final[str] = "PRISM-AUDIT-2026-08-06-C"
 AUDIT_BASELINE_DOC_VERSION: Final[str] = "1.3"
 

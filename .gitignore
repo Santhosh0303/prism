@@ -26,3 +26,10 @@ artifacts/
 
 # Local environment
 .env
+
+# Internal design and audit documents. They are the specification this implementation was
+# built against and are deliberately not published: the repository ships what a user needs
+# to run and understand PRISM, not the working material behind it.
+PRISM_ARCHITECTURE*.md
+PRISM_IMPLEMENTATION_PLAN*.md
+PRISM_SYSTEM_DESIGN_TECH_STACK*.md

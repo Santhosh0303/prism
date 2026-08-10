@@ -76,9 +76,9 @@ performance trick.
 The contradiction threshold is 0.5 — the natural argmax boundary of a three-class softmax.
 It was **not fitted**, not tuned, and not validated against any labelled data.
 
-Design section 6.9 permits fitting only on locked, human-labelled calibration pairs, and
-implementation plan Task 16 forbids any agent from writing, paraphrasing, expanding, or
-labelling those seeds. No such corpus exists, so none was invented.
+The design rule is that the threshold may be fitted only on locked, human-labelled
+calibration pairs, and that no automated agent may write, paraphrase, expand, or label
+those seeds. No such corpus exists, so none was invented.
 
 While this status holds:
 
@@ -122,7 +122,7 @@ the same as getting it.
 
 The external-data check is a bounded byte scan for the ONNX external-data markers plus a
 companion-file check. It is **not** a full protobuf parse — that would require an `onnx`
-dependency the six-package runtime budget has no room for. It catches the realistic case;
+dependency, and the runtime dependency budget is capped at six packages. It catches the realistic case;
 it is recorded here as a limitation rather than presented as proof.
 
 ## Provenance

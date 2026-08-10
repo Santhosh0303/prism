@@ -57,6 +57,11 @@ content and neither should a report.
 ## Supply chain
 
 Every release is intended to carry an SBOM, SHA-256 sums, SLSA provenance, and a Sigstore
-signature. Consult `docs/verification-ledger.md` for the evidence status of the specific
-version you are running: gates that have not been executed are recorded there as
-`PENDING_EXTERNAL_VALIDATION` rather than presented as passes.
+signature. **Version 0.1.0 carries none of these yet.** Signed provenance requires a
+hosted CI identity that does not exist for this build, and it is recorded as outstanding
+in the README rather than presented as done.
+
+Dependencies are pinned in `uv.lock` and were audited with `pip-audit` against the
+resolved lock: no known vulnerabilities across 46 packages at the time of writing. Model
+artifacts are pinned by immutable upstream revision and SHA-256 and re-verified before
+every session; see `docs/model-card.md`.
