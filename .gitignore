@@ -33,3 +33,6 @@ artifacts/
 PRISM_ARCHITECTURE*.md
 PRISM_IMPLEMENTATION_PLAN*.md
 PRISM_SYSTEM_DESIGN_TECH_STACK*.md
+
+# Session state. Working material, not part of the published surface.
+STATE.md
