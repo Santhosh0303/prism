@@ -100,6 +100,14 @@ show_error_codes = true
 module = ["onnxruntime.*", "tokenizers.*"]
 ignore_missing_imports = true
 
+# onnxruntime and tokenizers ship no type information, so every value crossing that
+# boundary is Any. Confined to the one module that touches them; the rest of the
+# codebase keeps disallow_any_unimported.
+[[tool.mypy.overrides]]
+module = ["prism.measure.models"]
+disallow_any_unimported = false
+warn_return_any = false
+
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
@@ -166,10 +174,16 @@ forbidden_modules = ["openai", "anthropic", "google", "cohere", "mistralai", "to
 [[tool.importlinter.contracts]]
 name = "Adapter / service / engine layering"
 type = "layers"
+# Siblings on one line must be independent of each other, so modules that legitimately
+# depend on one another get their own rung.
 layers = [
     "prism.cli | prism.mcp_server",
     "prism.service",
-    "prism.synthesis | prism.measure | prism.preflight",
+    "prism.synthesis",
+    "prism.measure",
+    "prism.preflight",
     "prism.contracts",
-    "prism.limits | prism.errors | prism.constants | prism.version",
+    "prism.limits",
+    "prism.errors",
+    "prism.constants | prism.version",
 ]

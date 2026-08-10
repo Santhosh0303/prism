@@ -14,12 +14,20 @@ Three rules govern everything here:
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
 from enum import StrEnum
 from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .constants import CALIBRATION_HUMAN_VALIDATED, CALIBRATION_UNCALIBRATED
 from .limits import (
@@ -603,6 +611,48 @@ class HealthReport(_Strict):
     calibration_status: str = CALIBRATION_UNCALIBRATED
     components: tuple[ComponentHealth, ...] = ()
     diagnostics: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+
+
+def parse_payload[ModelT: BaseModel](model: type[ModelT], payload: object) -> ModelT:
+    """Validate an untrusted payload into a public contract.
+
+    Strict mode does not coerce a ``list`` into a ``tuple``, and every sequence field here
+    is a tuple because reports are immutable. A payload that arrived as JSON therefore has
+    to be validated in JSON mode, where an array maps to a tuple correctly.
+
+    Both adapters route through this one function. When this was implemented per-adapter,
+    the CLI and the MCP server failed identically on the same valid input, which is
+    exactly the duplicated-integration-logic failure invariant A14 exists to prevent.
+
+    Raises:
+        PrismError: ``INVALID_INPUT`` with the offending field paths — never the offending
+            values, which would put user content into a diagnostic.
+    """
+    from .errors import ErrorCode, PrismError
+
+    try:
+        if isinstance(payload, (str, bytes, bytearray)):
+            return model.model_validate_json(payload)
+        return model.model_validate_json(json.dumps(payload, default=str, ensure_ascii=True))
+    except ValidationError as exc:
+        fields = sorted({".".join(str(part) for part in error["loc"]) for error in exc.errors()})[
+            :10
+        ]
+        raise PrismError(
+            code=ErrorCode.INVALID_INPUT,
+            message=f"Input does not satisfy the {model.__name__} contract.",
+            diagnostics={
+                "model": model.__name__,
+                "error_count": exc.error_count(),
+                "fields": ", ".join(fields),
+            },
+        ) from None
+    except (TypeError, ValueError) as exc:
+        raise PrismError(
+            code=ErrorCode.INVALID_INPUT,
+            message="Input could not be read as JSON.",
+            diagnostics={"model": model.__name__, "error_type": type(exc).__name__},
+        ) from None
 
 
 def public_models() -> tuple[type[BaseModel], ...]:
