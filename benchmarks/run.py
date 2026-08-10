@@ -5,8 +5,8 @@ hardware it ran on. A latency number without its hardware is not evidence.
 
     uv run python benchmarks/run.py --profile release --output benchmarks/out/run.json
 
-The release profile is at least 100 preflight calls and 30 measurements after warm-up
-(design section 12.2). The default smoke profile is smaller and is not release evidence.
+The release profile is at least 100 preflight calls and 30 measurements after warm-up.
+The default smoke profile is smaller and is not release evidence.
 """
 
 from __future__ import annotations

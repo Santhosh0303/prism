@@ -2,16 +2,16 @@
 
 Four read-only tools, registered in a fixed order, with static descriptions and no
 dynamic names — so a client can cache discovery and a tool description can never carry
-user content (design section 9.5).
+user content.
 
 The transport is stdio because the client launches the process: there is no listening
 port, no OAuth, no token handling, and no remote exposure. Streamable HTTP is not merely
-disabled here, it is absent from v1 (architecture section 10.3).
+disabled here, it is absent from v1.
 
 This module contains no analysis. It validates, delegates to ``PrismService``, and
 converts typed failures into structured results. A returned error is a *value*, not an
 exception trace: the caller gets a stable code, retryability, the affected component, a
-safe next action, and a content-free request id (invariant A25).
+safe next action, and a content-free request id.
 """
 
 from __future__ import annotations

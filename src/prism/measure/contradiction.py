@@ -1,10 +1,10 @@
 """The pair ledger and the denominator arithmetic.
 
 The ledger is the primary evidence. Every public aggregate is computed from it, and the
-report can be reconstructed from it exactly (gate G16). Projection for display happens
-later and cannot touch these numbers (invariant A23).
+report can be reconstructed from it exactly. Projection for display happens later and
+cannot touch these numbers.
 
-Denominator, stated once, exactly as design section 6.10 defines it::
+Denominator, stated once::
 
     pairs_total              all cross-candidate claim-unit pairs
     relevant_pairs           pairs at or above the frozen relevance floor
@@ -249,7 +249,7 @@ def build_ledger(pair_set: PairSet, encoders: Encoders) -> PairLedger:
 #: Exact-conflict patterns. These are deterministic checks, not model output: a claim that
 #: says "supported" and one that says "not supported" in the same candidate is a conflict
 #: whatever an encoder thinks. They are reported as diagnostics and never mixed into the
-#: cross-candidate contradiction rate (architecture section 6.11).
+#: cross-candidate contradiction rate.
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv?(\d+\.\d+(?:\.\d+)?)\b")
 _DATE_PATTERN: Final[re.Pattern[str]] = re.compile(r"\b(\d{4}-\d{2}-\d{2})\b")
 _NUMBER_UNIT_PATTERN: Final[re.Pattern[str]] = re.compile(

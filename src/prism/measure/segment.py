@@ -1,17 +1,17 @@
 """Claim normalisation and segmentation.
 
 Structured claim packets are the supported input; they bypass segmentation entirely,
-which is most of the reason they exist (ADR-003). A constrained plain-text path is kept
+which is most of the reason they exist. A constrained plain-text path is kept
 for compatibility with candidates produced elsewhere.
 
 The rule that governs this module: **content loss is never silent**. Every removed
 region, dropped fragment, truncation, and duplicate is counted and reported through
 ``normalization_warnings``, with a digest of what was removed rather than the removed
-text itself (invariant A18). A caller who cannot see what was discarded cannot judge
+text itself. A caller who cannot see what was discarded cannot judge
 whether the measurement covered their argument.
 
 Parsing is bounded and linear. There is no OCR, no markup rendering, no AST evaluation,
-and no regex that can backtrack catastrophically (design section 6.7).
+and no regex that can backtrack catastrophically.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ class ClaimUnit:
 
     ``text`` is the original, preserved exactly as the host wrote it. ``matching_view`` is
     an NFKC-folded projection used only for comparison, so that normalisation can never
-    alter what is reported back to the user (design section 6.7 step 5).
+    alter what is reported back to the user.
     """
 
     claim_id: str
@@ -286,7 +286,7 @@ def find_duplicate_candidates(
     """Identify candidates whose claim set is exactly another's.
 
     Submitting the same answer twice must not look like two agreeing reviewers. Duplicates
-    are excluded from aggregate scoring and reported (design section 6.12).
+    are excluded from aggregate scoring and reported.
     """
     duplicates: list[tuple[str, str]] = []
     fingerprints: dict[str, str] = {}

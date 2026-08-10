@@ -2,7 +2,7 @@
 
 Two CPU encoders, in strict order. E1 decides whether two claims are about the same
 subject; E2 decides whether same-subject claims disagree. Embedding similarity never
-becomes an agreement score (ADR-005), and the relevance stage is not an optimisation —
+becomes an agreement score, and the relevance stage is not an optimisation —
 without it the NLI model confidently labels unrelated sentences as contradictory.
 """
 

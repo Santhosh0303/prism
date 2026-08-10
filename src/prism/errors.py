@@ -1,12 +1,12 @@
 """Typed failures and the human-recovery contract.
 
-Architecture invariant A25: every public error carries a stable code, retryability, the
-affected component, a safe next action, and a content-free request identifier. An
+Every public error carries a stable code, retryability, the affected component, a safe
+next action, and a content-free request identifier. An
 operator must be able to tell malformed input from version skew, saturation, a missing
 model, an integrity failure, a timeout, and an internal fault *without reading a
 traceback*.
 
-Architecture invariant A18: diagnostics are content-free. Nothing in this module may
+Diagnostics are content-free. Nothing in this module may
 carry task text, claim text, source labels, environment values, or filesystem paths.
 """
 
@@ -27,7 +27,7 @@ class ErrorCode(StrEnum):
     """Stable, machine-readable failure identities.
 
     These strings are part of the public contract. A minor release may add a code but
-    may not rename or repurpose one (invariant A22).
+    may not rename or repurpose one.
     """
 
     INVALID_INPUT = "INVALID_INPUT"

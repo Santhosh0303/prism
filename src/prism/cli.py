@@ -1,7 +1,7 @@
 """The command-line adapter.
 
 It transforms files and standard input into public contracts and serialises reports. It
-performs no analysis of its own (architecture section 5), so the CLI and the MCP server
+performs no analysis of its own, so the CLI and the MCP server
 cannot drift apart in behaviour: both call the same ``PrismService``.
 
 Safety properties, all of which are tested:
@@ -10,7 +10,7 @@ Safety properties, all of which are tested:
 * it accepts standard input and regular files only — devices, FIFOs, sockets, and symlinks
   are rejected, so a path cannot make PRISM read something unbounded or privileged;
 * it emits **one** final stdout write, after the report is complete and validated. A
-  crash mid-run cannot leave a partially serialised report that parses (invariant A17);
+  crash mid-run cannot leave a partially serialised report that parses;
 * on a broken pipe it releases resources and exits with a stable code, printing no
   traceback and no content.
 
@@ -44,7 +44,8 @@ from .service import PrismService
 from .telemetry import new_request_id
 from .version import PACKAGE_VERSION, version_info
 
-# Stable exit codes (plan Task 11 Step 3).
+# Stable exit codes. These are part of the public surface: scripts branch on them, so a
+# value may be added but never repurposed.
 EXIT_OK = 0
 EXIT_INVALID_INPUT = 2
 EXIT_INSUFFICIENT = 3

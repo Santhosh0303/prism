@@ -2,7 +2,7 @@
 
 Four labels, and none of them means "true". ``MULTI_SOURCE_AGREEMENT`` means several
 declared source groups did not contradict each other on the pairs that were comparable.
-That is a statement about the claims, not about the world (invariant A10 and A13).
+That is a statement about the claims, not about the world.
 
 ``INDEPENDENT`` and ``CONVERGENT`` are deliberately absent. PRISM cannot establish either,
 and an architecture gate fails the build if those strings reappear.

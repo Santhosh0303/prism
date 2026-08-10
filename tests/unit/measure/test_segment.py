@@ -1,4 +1,4 @@
-"""Normalisation, segmentation, and duplicate detection — plan Task 6, Steps 1 and 2.
+"""Normalisation, segmentation, and duplicate detection.
 
 The governing property is that content loss is never silent. Several of these tests assert
 on the *warning* rather than on the surviving text, because a normaliser that quietly does
@@ -45,7 +45,7 @@ def test_duplicate_claims_within_a_candidate_are_removed_and_reported() -> None:
 
 
 def test_warnings_carry_a_digest_not_the_removed_text() -> None:
-    """Invariant A18: diagnostics are content-free."""
+    """Diagnostics are content-free."""
     secret = "alpha SECRETVALUE bravo charlie delta echo foxtrot golf"
     _, warnings = normalize_claims(make_packet("a", [secret, secret.upper()]))
     for warning in warnings:

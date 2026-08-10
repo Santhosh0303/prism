@@ -1,8 +1,8 @@
 """Shared fixtures for measurement tests.
 
 Most of these tests must not touch ONNX Runtime. Pure arithmetic deserves exact
-assertions, and the plan is explicit: "synthetic-vector arithmetic is exact; no encoder is
-invoked in pure-math tests" (Task 8 Step 8). The fake encoder below makes relevance and
+assertions: synthetic-vector arithmetic is exact, and no encoder is invoked in pure-math
+tests. The fake encoder below makes relevance and
 contradiction *inputs* to the arithmetic rather than something to be discovered, so a
 denominator bug cannot hide behind model noise.
 """

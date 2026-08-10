@@ -11,7 +11,7 @@ naturally:
 
 The contract carries claim identifiers and fixed disclosure templates — never repeated
 candidate prose. Echoing untrusted text back would both cost host tokens and re-present
-that text as though PRISM had endorsed it (design section 6.14).
+that text as though PRISM had endorsed it.
 
 Fail-soft is deliberate: when measurement is unavailable, degraded, or uncalibrated, the
 contract states the exact limitation and requires the host to preserve differences

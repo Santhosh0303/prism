@@ -1,4 +1,4 @@
-"""Scope classification — implementation plan Task 8, Step 5.
+"""Scope classification.
 
 The asymmetry in these tests is deliberate. A missed scope difference costs a slightly
 pessimistic contradiction rate. A false scope difference *removes a real contradiction

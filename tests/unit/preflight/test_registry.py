@@ -1,4 +1,4 @@
-"""Registry loading and integrity — implementation plan Task 4.
+"""Registry loading and integrity.
 
 The registry is the only place perspective prose lives. If it can be loaded in a broken
 state, every downstream selection is quietly wrong, so every structural rule fails closed

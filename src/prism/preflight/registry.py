@@ -1,16 +1,15 @@
 """The versioned perspective registry.
 
 The registry is canonical data, not code. Code embeds no perspective prose except
-fallback error messages (design section 6.3). It is content-hashed so that a semantic
+fallback error messages. It is content-hashed so that a semantic
 change to a lens is visible in every report that used it, and it is validated at load so
 that a malformed registry fails a shallow health check rather than producing a quietly
 degraded perspective set.
 
-Deviation from the plan's file map, recorded deliberately: the plan places
-``perspectives/registry.yaml`` at the repository root. A root-level path is not carried
-by an installed wheel, and shipping a second copy would create exactly the accidental
-redundancy invariant A14 prohibits. The canonical file therefore lives inside the
-package. There is one copy, and it is the one that gets installed.
+The registry file lives inside the package rather than at the repository root. A
+root-level path is not carried by an installed wheel, and shipping a second copy would
+create exactly the accidental redundancy that a single canonical definition exists to
+prevent. There is one copy, and it is the one that gets installed.
 """
 
 from __future__ import annotations
@@ -41,7 +40,7 @@ VALID_RISK_TAGS: Final[frozenset[str]] = frozenset({"critical", "adversarial", "
 
 #: These lenses must remain simultaneously selectable. Critical mode is required to
 #: include security and red_team together, so an exclusion between any pair of them would
-#: make a mandatory selection unsatisfiable (design section 6.3).
+#: make a mandatory selection unsatisfiable.
 CRITICAL_LENSES: Final[frozenset[str]] = frozenset({"security", "red_team", "performance"})
 
 
@@ -319,8 +318,7 @@ class PerspectiveRegistry:
         """Hash the semantic content, not the file bytes.
 
         Reformatting the YAML must not change the hash; changing a question must. Sets are
-        sorted so that the digest is stable across process restarts and hash seeds
-        (invariant A24).
+        sorted so that the digest is stable across process restarts and hash seeds.
         """
         canonical = {
             "version": version,

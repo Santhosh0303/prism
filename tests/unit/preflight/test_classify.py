@@ -1,4 +1,4 @@
-"""Deterministic classification — implementation plan Task 5.
+"""Deterministic classification.
 
 Classification is a table lookup, so these tests are about routing behaviour and about
 what happens when the signal is weak, which is the case that matters: guessing a specific

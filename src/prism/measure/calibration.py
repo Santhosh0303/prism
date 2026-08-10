@@ -1,9 +1,10 @@
 """Contradiction threshold and calibration state.
 
 The threshold that separates "contradiction" from "not contradiction" is the single
-number that most directly determines what PRISM reports. Design section 6.9 says it may
-be fitted **only** on locked, human-labelled calibration pairs, and implementation plan
-Task 16 forbids any agent from writing, paraphrasing, expanding, or labelling those seeds.
+number that most directly determines what PRISM reports. It may be fitted **only** on
+locked, human-labelled calibration pairs, and no agent may write, paraphrase, expand, or
+label those seeds — a model that authors its own evaluation data measures its own
+opinion.
 
 No such corpus exists yet. So this module does the only honest thing available:
 

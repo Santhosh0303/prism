@@ -1,7 +1,7 @@
 # PRISM perspective registry.
 #
 # Canonical data, not code. A semantic change here changes routing, so it requires a
-# version bump and a golden-diff review (design section 6.3).
+# version bump and a golden-diff review.
 #
 # risk_tags vocabulary:
 #   adversarial  - the lens tries to break or falsify the artifact

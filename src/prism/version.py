@@ -1,8 +1,9 @@
 """Version and compatibility identifiers.
 
-Every behaviourally relevant version is surfaced in reports (architecture invariant A6:
-no hidden state) and in the compatibility declarations that host skills check against
-(invariant A22: compatibility is explicit, not inferred).
+Every behaviourally relevant version is surfaced in reports, so there is no hidden state
+that changes a result without appearing in it, and in the compatibility declarations that
+host skills check against — compatibility is declared, never inferred from a version
+that happens to look close enough.
 """
 
 from __future__ import annotations

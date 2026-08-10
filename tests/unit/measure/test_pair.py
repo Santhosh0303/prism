@@ -1,7 +1,7 @@
-"""Pair enumeration and the frozen relevance floor — plan Task 6, Steps 4 and 5.
+"""Pair enumeration and the frozen relevance floor.
 
-Step 5 asks for an architecture assertion that inspects the module source to prove no
-speed-floor dependency. That check is here and it reads the file, not a comment: a
+One of these is an architecture assertion that inspects the module source to prove no
+speed-floor dependency. It reads the file, not a comment: a
 docstring promising independence is not evidence of independence.
 """
 

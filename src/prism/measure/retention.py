@@ -6,7 +6,7 @@ module finds those claims so the synthesis contract can require the host to keep
 
 The field is called ``retained_distinct_claims`` and not "correct minority" for a reason
 that matters: PRISM cannot verify truth, so it cannot know whether a lone claim is right.
-**Retention is not endorsement** (design section 6.13). It says only that this claim was
+**Retention is not endorsement.** It says only that this claim was
 unopposed and carries one of four declared kinds of content worth preserving.
 
 The four reasons are a closed set. A claim that matches none is not retained, because a

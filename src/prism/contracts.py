@@ -1,15 +1,19 @@
 """Public contracts.
 
 This module is the only place a public field shape is defined. Adapters serialise these
-models; they never invent a parallel schema (invariant A14: redundancies must be
-intentional).
+models; they never invent a parallel schema, because a second definition of the same
+shape is a second thing to keep in sync and the two will drift.
 
 Three rules govern everything here:
 
-* **Inputs are data** (invariant A5). Task and claim text is validated, never interpreted.
-* **Outputs are immutable and complete** (invariant A17). A partial report is not a report.
-* **Provenance is declared, not inferred** (invariant A15). ``source_group_id`` is the only
-  thing that can raise source diversity; ``source_label`` is display-only.
+* **Inputs are data.** Task and claim text is validated, never interpreted — text that
+  arrives from a caller must not be able to steer the system that measures it.
+* **Outputs are immutable and complete.** A partial report is not a report: a consumer
+  cannot tell a missing field from a field that was measured and found empty, so every
+  report is emitted whole or not at all.
+* **Provenance is declared, not inferred.** ``source_group_id`` is the only thing that
+  can raise source diversity; ``source_label`` is display-only. Guessing independence
+  from labels would let two copies of one source look like corroboration.
 """
 
 from __future__ import annotations
@@ -99,7 +103,7 @@ class EvidenceStatus(StrEnum):
 
 class ScopeResult(StrEnum):
     """Tri-state by design. UNCERTAIN pairs stay in the denominator so a heuristic
-    cannot hide a real contradiction (design section 6.11)."""
+    cannot hide a real contradiction."""
 
     SAME_SCOPE = "SAME_SCOPE"
     SCOPE_DIVERGENT = "SCOPE_DIVERGENT"
@@ -252,7 +256,7 @@ class PerspectiveInstruction(_Strict):
 
 class ExecutionContract(_Strict):
     """What the host is being asked to produce. Deliberately small: claim packets, not
-    essays (ADR-003)."""
+    essays: a five-lens review must not cost five essays."""
 
     output: Literal["claim_packets"] = "claim_packets"
     max_claims_per_perspective: int = Field(ge=1, le=MAX_CLAIMS_PER_CANDIDATE)
@@ -318,7 +322,7 @@ class Claim(_Strict):
 class CandidatePacket(_Strict):
     candidate_id: Identifier
     #: Required. All packets produced in one host generation pass MUST share one group.
-    #: This is the only field that can raise source diversity (invariant A15).
+    #: This is the only field that can raise source diversity.
     source_group_id: Identifier
     #: Display only. Cannot influence source diversity, however distinctive it looks.
     source_label: SourceLabel | None = None
@@ -349,7 +353,7 @@ class CandidatePacket(_Strict):
 class MeasureConfig(_Strict):
     timeout_seconds: float = Field(default=DEFAULT_TIMEOUT_SECONDS, gt=0, le=60)
     #: Raw directional NLI scores are diagnostic. They are bounded by the same inline
-    #: detail cap as every other array (invariant A23).
+    #: detail cap as every other array.
     include_raw_nli_scores: bool = False
 
 
@@ -417,7 +421,7 @@ class RetainedClaim(_Strict):
     claim_id: Identifier
     candidate_id: Identifier
     reason: RetentionReason
-    #: Retention is not endorsement (design section 6.13).
+    #: Retention is not endorsement.
     note: str = Field(max_length=256)
 
 
@@ -433,7 +437,7 @@ class NormalizationWarning(_Strict):
     candidate_id: Identifier
     code: NormalizationWarningCode
     count: int = Field(ge=1)
-    #: Hash of the removed region, never the region itself (invariant A18).
+    #: Hash of the removed region, never the region itself.
     removed_digest: Digest | None = None
 
 
@@ -512,7 +516,7 @@ class MeasureReport(_Strict):
     raw_nli_scores_omitted_count: int = Field(default=0, ge=0)
 
     confidence_spread: int | None = Field(default=None, ge=0, le=100)
-    #: Exploratory until separately validated (design section 6.14).
+    #: Exploratory until separately validated.
     overconfidence_gap: float | None = None
 
     sources_distinct: int = Field(ge=1)
@@ -622,7 +626,8 @@ def parse_payload[ModelT: BaseModel](model: type[ModelT], payload: object) -> Mo
 
     Both adapters route through this one function. When this was implemented per-adapter,
     the CLI and the MCP server failed identically on the same valid input, which is
-    exactly the duplicated-integration-logic failure invariant A14 exists to prevent.
+    exactly the duplicated-integration-logic failure that one shared entry point exists
+    to prevent.
 
     Raises:
         PrismError: ``INVALID_INPUT`` with the offending field paths — never the offending

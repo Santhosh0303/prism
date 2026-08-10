@@ -1,6 +1,6 @@
 """Bounded report projection.
 
-Invariant A23: exact aggregate counts are always returned, but inline detail is capped and
+Exact aggregate counts are always returned, but inline detail is capped and
 deterministically ordered. A maximum-conflict workload — five candidates, four claims
 each, all 160 pairs contradictory — must not produce a result that breaches the MCP size
 budget.
@@ -13,7 +13,7 @@ separately.
 
 Silent truncation is forbidden. If the report still exceeds the byte budget after
 projection, text fields are replaced by identifiers, and only then does it fail with a
-typed ``OUTPUT_BUDGET_EXCEEDED`` (design section 6.15).
+typed ``OUTPUT_BUDGET_EXCEEDED``.
 """
 
 from __future__ import annotations

@@ -3,8 +3,7 @@
 ## Security position
 
 PRISM is a local, read-only analytic component. Its primary security control is a narrow
-capability set rather than a policy layer wrapped around powerful tools
-(architecture invariant A10).
+capability set rather than a policy layer wrapped around powerful tools.
 
 During normal analysis PRISM performs:
 
@@ -19,7 +18,7 @@ a dedicated model root, and input explicitly supplied by the caller.
 
 ## What PRISM does not claim
 
-PRISM does not claim that zero-day vulnerabilities are eliminated (invariant A12).
+PRISM does not claim that zero-day vulnerabilities are eliminated.
 Hash verification proves an artifact is the one that was pinned; it cannot prove that a
 correctly signed native dependency is free of unknown flaws.
 
@@ -32,7 +31,7 @@ deployment therefore requires all of the following from the operator:
 3. a dedicated read-only directory for model artifacts;
 4. no secrets present in the child process environment.
 
-Application least capability is not an OS sandbox (invariant A16).
+Application least capability is not an OS sandbox.
 
 ## Kill switch
 

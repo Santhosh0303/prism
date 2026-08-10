@@ -1,11 +1,9 @@
 """Denominator arithmetic, ledger reconstruction, and bounded projection.
 
-Plan Task 8 Step 8: "synthetic-vector arithmetic is exact; no encoder is invoked in
-pure-math tests". These use the fake encoder so every input is known and every assertion
-can be exact.
+Synthetic-vector arithmetic is exact and no encoder is invoked here. These use the fake
+encoder so every input is known and every assertion can be exact.
 
-Includes the property tests from design section 17 and the maximum-conflict output test
-from Task 18 Step 5.
+Includes the denominator property tests and the maximum-conflict output test.
 """
 
 from __future__ import annotations
@@ -102,7 +100,7 @@ def test_repeated_measurement_is_deterministic(encoders: FakeEncoders) -> None:
 
 
 # --------------------------------------------------------------------------------------
-# property tests — design section 17
+# property tests — the denominator identities that must hold for any ledger
 # --------------------------------------------------------------------------------------
 
 
@@ -159,7 +157,7 @@ def test_rate_invariants_hold_for_any_ledger(
 
 
 # --------------------------------------------------------------------------------------
-# bounded projection — invariant A23, plan Task 18 Step 5
+# bounded projection — aggregates exact, inline detail capped
 # --------------------------------------------------------------------------------------
 
 
@@ -234,7 +232,7 @@ def test_uncalibrated_report_routes_findings_to_experimental_fields() -> None:
 
 
 def test_report_can_be_reconstructed_from_the_raw_ledger() -> None:
-    """Gate G16: the published aggregates must be recomputable from primary evidence."""
+    """The published aggregates must be recomputable from primary evidence."""
     ledger = PairLedger(entries=entries(50, 12, 45), pairs_total=50, threshold=0.5)
     report = report_from(ledger)
 

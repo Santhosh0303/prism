@@ -1,7 +1,7 @@
 """Task profiles, their lens priorities, and the deterministic classification signals.
 
 Everything here is a table. There is no model, no embedding, and no learned weight, which
-is what makes preflight reproducible, inspectable, free, and fast (ADR-004).
+is what makes preflight reproducible, inspectable, free, and fast.
 
 Adding or reweighting a signal is a semantic registry change: it alters routing, so it
 must be accompanied by a golden-test diff review.
@@ -33,11 +33,11 @@ MODE_PERSPECTIVE_COUNT: Final[dict[PrismMode, int]] = {
     PrismMode.CRITICAL: 5,
 }
 
-#: Critical mode always includes these, regardless of profile (design section 6.5).
+#: Critical mode always includes these, regardless of profile.
 MANDATORY_CRITICAL_LENSES: Final[tuple[str, ...]] = ("security", "red_team")
 
 #: Used when classification is ambiguous, and to fill any profile template that cannot
-#: supply enough distinct lenses after exclusions (plan Task 5 Step 3).
+#: supply enough distinct lenses after exclusions.
 GENERAL_FALLBACK_ORDER: Final[tuple[str, ...]] = (
     "systems",
     "user",
@@ -259,7 +259,7 @@ MIN_WINNING_SCORE: Final[int] = 3
 
 #: The winner must beat the runner-up by this margin. Below it the task is genuinely
 #: ambiguous and is routed to the general fallback with LOW confidence rather than
-#: guessing (design section 6.4 step 5).
+#: guessing.
 MIN_WINNING_MARGIN: Final[int] = 2
 
 #: Above this score, and with the required margin, classification is reported as HIGH.

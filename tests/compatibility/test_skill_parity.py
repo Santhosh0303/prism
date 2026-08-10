@@ -1,7 +1,7 @@
-"""Host integration parity — implementation plan Tasks 13 and 14.
+"""Host integration parity.
 
-Task 14 Step 4: "Parse both skill files into a normalized workflow and assert they
-reference identical tool names, ordering, statuses, and schema versions."
+Both skill files are parsed into a normalised workflow and asserted to reference
+identical tool names, ordering, statuses, and schema versions.
 
 The risk these tests exist for is drift: two skill files that start identical and diverge
 one helpful edit at a time, until Claude Code and Codex quietly run different workflows
@@ -9,7 +9,7 @@ against the same server. Wording may differ. Semantics may not.
 
 They also enforce the rule that neither skill contains business logic — no thresholds, no
 denominators, no perspective definitions. An adapter that reimplements the core is an
-adapter that can disagree with it (invariant A11).
+adapter that can disagree with it.
 """
 
 from __future__ import annotations
@@ -69,7 +69,7 @@ def test_integration_asset_exists(path: Path) -> None:
 
 @pytest.mark.parametrize("path", SKILLS)
 def test_frontmatter_declares_compatibility_range(path: Path) -> None:
-    """Invariant A22: a skill declares the server range it works against."""
+    """A skill declares the server range it works against; it never infers it."""
     fields = frontmatter(read(path))
     assert fields["name"] == "prism"
     assert fields["schema_version"] == SCHEMA_VERSION
@@ -95,7 +95,7 @@ def test_both_skills_drive_the_same_tools_in_the_same_order() -> None:
 
 
 def test_every_referenced_tool_actually_exists() -> None:
-    """Fitness function 5: tool names and skill references must match."""
+    """Tool names and skill references must match, or a skill invokes nothing."""
     for path in SKILLS:
         for name in tool_sequence(read(path)):
             assert name in MCP_TOOL_NAMES, f"{path.name} references unknown tool {name}"

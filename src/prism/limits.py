@@ -1,8 +1,8 @@
 """Hard limits, checked before any inference.
 
-Every value here is pinned by design section 6.2. They are a denial-of-service control
-(design section 14.8) and a correctness control: they bound the pair space so that a
-legal maximum workload has a knowable cost.
+Every value here is pinned rather than tunable. They are a denial-of-service control and
+a correctness control: they bound the pair space so that a legal maximum workload has a
+knowable cost.
 
 Limits reject. They never truncate silently (plan global constraints).
 """
@@ -42,7 +42,7 @@ MIN_CONTENT_WORDS: Final[int] = 8
 MAX_CROSS_CANDIDATE_PAIRS: Final[int] = 160
 
 #: Within-candidate pairs are diagnostic only and never enter the cross-candidate
-#: contradiction denominator (architecture section 6.11).
+#: contradiction denominator.
 MAX_INTERNAL_PAIRS: Final[int] = 30
 
 # --------------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ MAX_SOURCE_LABEL_CHARS: Final[int] = 256
 MAX_REGISTRY_PERSPECTIVES: Final[int] = 64
 
 # --------------------------------------------------------------------------------------
-# output projection (invariant A23)
+# output projection: aggregates stay exact, inline detail is capped
 # --------------------------------------------------------------------------------------
 
 #: Inline records per detailed category in the default public report. Exact aggregate
@@ -68,7 +68,7 @@ MAX_DEFAULT_REPORT_BYTES: Final[int] = 12 * 1024
 
 DEFAULT_TIMEOUT_SECONDS: Final[float] = 10.0
 
-#: Admission is zero-queue by design (invariant A20). Excess work is rejected with a
+#: Admission is zero-queue by design. Excess work is rejected with a
 #: typed BUSY inside the admission budget; it is never parked in a queue where it could
 #: become a stale result or hidden background work.
 MAX_CONCURRENT_MEASUREMENTS: Final[int] = 2

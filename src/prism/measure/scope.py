@@ -11,7 +11,7 @@ conservative:
 * ``SCOPE_DIVERGENT`` — both claims carry explicit, differing markers on the *same*
   dimension. Only this state is excluded from the denominator.
 * ``UNCERTAIN`` — one side carries a marker, or the signals conflict. **Stays in the
-  denominator** and is reported (design section 6.11).
+  denominator** and is reported.
 * ``SAME_SCOPE`` — no differing markers.
 
 Negation is checked before a marker is believed: "not in production" must not register as
@@ -66,17 +66,17 @@ SCOPE_MARKERS: Final[dict[str, dict[str, tuple[str, ...]]]] = {
 
 #: Only these dimensions may produce SCOPE_DIVERGENT.
 #:
-#: Design section 6.11 requires three conditions for divergence, and the second one —
-#: "the core proposition can otherwise coexist under those scopes" — is what this set
-#: encodes. A lifecycle, environment, scale, or platform difference genuinely describes
-#: two different worlds in which both claims can hold.
+#: Divergence requires that the core proposition can otherwise coexist under the two
+#: scopes, and that is what this set encodes. A lifecycle, environment, scale, or
+#: platform difference genuinely describes two different worlds in which both claims
+#: can hold.
 #:
 #: `time` and `certainty` do not. "The service is ready today" and "the service will fail"
 #: differ in tense and modality, not in scope: they are a direct disagreement about the
 #: same system. Treating that as scope divergence removed a real contradiction from the
-#: denominator during integration testing, which is exactly the false-positive exclusion
-#: gate G19 blocks. These dimensions can now reach UNCERTAIN at most, and UNCERTAIN pairs
-#: stay in the denominator.
+#: denominator during integration testing — exactly the false-positive exclusion this
+#: module exists to prevent. These dimensions can now reach UNCERTAIN at most, and
+#: UNCERTAIN pairs stay in the denominator.
 DIVERGENCE_CAPABLE_DIMENSIONS: Final[frozenset[str]] = frozenset(
     {"lifecycle", "environment", "scale", "platform"}
 )

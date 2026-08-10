@@ -1,8 +1,8 @@
-"""Perspective selection — implementation plan Task 5, Step 2.
+"""Perspective selection.
 
-Selection must be finite, deterministic, non-duplicating, and balanced. The four
-worked examples in the plan are asserted directly so that a routing table edit cannot
-drift away from the specification unnoticed.
+Selection must be finite, deterministic, non-duplicating, and balanced. Four worked
+examples are asserted directly so that a routing table edit cannot drift away from the
+declared behaviour unnoticed.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ def registry() -> PerspectiveRegistry:
 
 
 # --------------------------------------------------------------------------------------
-# the worked examples from the implementation plan
+# the worked routing examples
 # --------------------------------------------------------------------------------------
 
 

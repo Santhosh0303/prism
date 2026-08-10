@@ -1,7 +1,7 @@
 """Deterministic preflight: classification, selection, and the host execution contract.
 
 This subpackage must never import an inference runtime. Preflight has to work when the
-model bundle is absent, corrupt, or disabled (invariant A9, fitness function 1), and an
+model bundle is absent, corrupt, or disabled, and an
 import-linter contract fails the build if that boundary is crossed.
 """
 

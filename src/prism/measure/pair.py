@@ -4,12 +4,14 @@ This module owns which pairs exist and which of them are comparable. It is delib
 ignorant of two things:
 
 * **Contradiction.** Relevance says two claims are about the same subject. It never says
-  they agree or disagree; that is E2's job and only E2's job (ADR-005).
+  they agree or disagree; that is E2's job and only E2's job. Keeping the two stages
+  separate is what lets a relevance change be reviewed without re-reasoning about
+  contradiction, and vice versa.
 * **The speed floor.** ``pair.py`` must not import, accept, or reference any speed-floor
   configuration. An optimisation that skipped pairs must never be able to change the
   denominator, because that would silently convert unscored pairs into apparent agreement
-  (plan Task 6 Step 4). ``tests/unit/measure/test_pair.py`` asserts this against the
-  module source, not against a comment.
+  ``tests/unit/measure/test_pair.py`` asserts this against the module source, not
+  against a comment.
 
 The relevance floor itself is a compiled-in constant. It is not exposed through the CLI,
 MCP, environment, or config, so no caller can tune their way to a more agreeable result.
@@ -27,7 +29,7 @@ from .segment import ClaimUnit, NormalizedCandidate
 
 #: Cosine similarity below which two claims are treated as being about different subjects
 #: and are therefore not comparable. Frozen: documented, mutation-tested, and unreachable
-#: from any runtime parameter (design section 6.8).
+#: from any runtime parameter.
 #:
 #: The value is conservative on purpose. Setting it too high would drop genuinely related
 #: claims out of the denominator, which flatters the contradiction rate; too low admits
@@ -85,7 +87,7 @@ def enumerate_pairs(candidates: tuple[NormalizedCandidate, ...]) -> PairSet:
     Raises:
         PrismError: ``LIMIT_EXCEEDED`` if the pair space would exceed its cap. The check
             happens here, before any inference, so an oversized workload costs no model
-            time (design section 14.8).
+            time.
     """
     cross: list[ClaimPair] = []
     for left, right in combinations(candidates, 2):

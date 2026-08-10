@@ -1,4 +1,4 @@
-"""Security boundaries — implementation plan Tasks 6, 7, 10 and 17.
+"""Security boundaries.
 
 Covers the four trust boundaries that have executable consequences: untrusted input,
 the model bundle, diagnostics, and the filesystem surface of the CLI.
@@ -113,7 +113,7 @@ def test_validation_diagnostics_name_fields_not_values() -> None:
 
 
 def test_source_labels_cannot_manufacture_diversity() -> None:
-    """Gate G18. Five distinct labels, one group: still one source."""
+    """Five distinct labels, one group: still one source."""
     candidates = tuple(
         CandidatePacket(
             candidate_id=f"c{index}",
@@ -201,7 +201,7 @@ def test_intact_bundle_verifies(tmp_path: Path) -> None:
 
 
 def test_single_byte_corruption_fails_closed(tmp_path: Path) -> None:
-    """Plan Task 7 Step 6. One byte, and the bundle must be refused before inference."""
+    """One byte, and the bundle must be refused before inference."""
     manifest = manifest_fixture(tmp_path)
     target = tmp_path / "e1" / "onnx" / "model.onnx"
     corrupted = bytearray(target.read_bytes())
@@ -272,7 +272,7 @@ def test_path_traversal_in_the_manifest_is_refused(tmp_path: Path, escape: str) 
     ["task", "text", "claim", "question", "candidate", "source_label", "path", "env", "traceback"],
 )
 def test_content_bearing_diagnostic_keys_are_dropped(key: str) -> None:
-    """Invariant A18. A call site that passes content must not be able to leak it."""
+    """A call site that passes content must not be able to leak it."""
     assert key not in scrub({key: "SECRET", "count": 1})
 
 
@@ -281,7 +281,7 @@ def test_non_scalar_diagnostic_values_are_dropped() -> None:
 
 
 def test_no_raw_content_debug_mode_exists() -> None:
-    """Design section 14.7: raw logging is not implemented, including in debug mode."""
+    """Raw logging is not implemented, including in debug mode."""
     import prism.telemetry as telemetry
 
     source = Path(telemetry.__file__).read_text(encoding="utf-8")
@@ -295,7 +295,7 @@ def test_no_raw_content_debug_mode_exists() -> None:
 
 
 def test_core_operations_open_no_socket(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Gate G8. Any outbound attempt during preflight or synthesis fails the test."""
+    """Any outbound attempt during preflight or synthesis fails the test."""
     opened: list[str] = []
 
     def refuse(*_args: object, **_kwargs: object) -> None:

@@ -1,12 +1,12 @@
-"""Adapter equivalence and error actionability — plan Tasks 11, 12, and 18.
+"""Adapter equivalence and error actionability.
 
-Gate G22 asks for canonical digest parity across adapters. That is the property that makes
+These assert canonical digest parity across adapters. That is the property that makes
 "one core, many adapters" a fact rather than an intention: if the Python API, the CLI, and
 the MCP server can produce different bytes for the same input, then a user's result depends
 on which door they came through.
 
-Task 18 Step 11 asks that every public error code be actionable from the payload alone.
-An operator holding only the result must be able to tell retry from reconfigure from
+Every public error code must also be actionable from the payload alone. An operator
+holding only the result must be able to tell retry from reconfigure from
 restore from escalate, without a traceback.
 """
 
@@ -165,7 +165,7 @@ async def test_mcp_returns_a_typed_error_value_not_an_exception() -> None:
 
 
 # --------------------------------------------------------------------------------------
-# G22 — canonical digest parity across adapters
+# canonical digest parity across adapters
 # --------------------------------------------------------------------------------------
 
 
@@ -192,7 +192,7 @@ def test_repeated_python_calls_are_byte_identical(service: PrismService) -> None
 
 
 def test_canonical_digest_excludes_adapter_timestamps() -> None:
-    """Invariant A24: a timestamp an adapter attached must not change the digest."""
+    """A timestamp an adapter attached must not change the digest."""
     base = {"status": "OK", "value": 1}
     assert canonical_digest(base) == canonical_digest({**base, "timestamp": "2026-08-10T00:00:00Z"})
     assert canonical_digest(base) == canonical_digest({**base, "duration_ms": 12.5})
@@ -207,7 +207,7 @@ def test_canonical_json_is_ascii_and_sorted() -> None:
 
 
 # --------------------------------------------------------------------------------------
-# error actionability — plan Task 18 Step 11
+# error actionability: every public code must be actionable from the payload alone
 # --------------------------------------------------------------------------------------
 
 

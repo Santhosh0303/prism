@@ -1,7 +1,7 @@
 """Perspective selection.
 
 Selection is finite, deterministic, and non-overlapping. It is not creative: there is no
-persona generation, and no lens is invented at runtime (invariant A7).
+persona generation, and no lens is invented at runtime.
 
 The output is an ordered tuple. Order is part of the contract, because the golden tests
 assert byte-identical preflight reports across runs, processes, and platforms.

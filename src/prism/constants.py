@@ -3,8 +3,7 @@
 These are values the rest of the system reads but never negotiates. Anything a caller
 may influence belongs in a request contract, not here. In particular the relevance floor
 lives in ``prism.measure.pair`` as a compiled-in constant and is deliberately absent from
-this module so that it cannot be reached through configuration
-(implementation plan Task 6 Step 4, architecture section 6.8).
+this module so that it cannot be reached through configuration.
 """
 
 from __future__ import annotations
@@ -19,7 +18,8 @@ from typing import Final
 PACKAGE_NAME: Final[str] = "prism"
 
 #: MCP tool names in their fixed registration order. The catalog is static and
-#: deterministic so clients can cache discovery (design section 9.5, fitness function 5).
+#: deterministic so clients can cache discovery. These names are also asserted against
+#: the host skill files, so a rename here cannot silently desynchronise an integration.
 MCP_TOOL_NAMES: Final[tuple[str, ...]] = (
     "prism.preflight",
     "prism.measure",
@@ -39,12 +39,13 @@ REGISTRY_FILENAME: Final[str] = "registry.yaml"
 REGISTRY_SCHEMA_FILENAME: Final[str] = "registry.schema.json"
 
 #: Dedicated read-only model root. Production deployment points this at a directory the
-#: host sandbox mounts read-only (architecture invariant A16).
+#: host sandbox mounts read-only. This is an application-level boundary, not an OS
+#: sandbox.
 MODEL_ROOT_ENV_VAR: Final[str] = "PRISM_MODEL_ROOT"
 MODEL_MANIFEST_FILENAME: Final[str] = "manifest.json"
 
 #: Kill switch. Disables all inference while leaving deterministic preflight available
-#: (design section 19). It can never relax hash verification, path containment, source
+#: It can never relax hash verification, path containment, source
 #: grouping, duplicate suppression, or limits.
 DISABLE_MEASURE_ENV_VAR: Final[str] = "PRISM_DISABLE_MEASURE"
 
@@ -53,7 +54,7 @@ DISABLE_MEASURE_ENV_VAR: Final[str] = "PRISM_DISABLE_MEASURE"
 # --------------------------------------------------------------------------------------
 
 #: The only permitted ONNX Runtime execution provider. Asserted after session creation,
-#: not merely requested (implementation plan Task 7 Step 3).
+#: not merely requested: requesting a provider that is unavailable silently falls back.
 REQUIRED_EXECUTION_PROVIDER: Final[str] = "CPUExecutionProvider"
 
 # --------------------------------------------------------------------------------------
@@ -73,9 +74,9 @@ CALIBRATION_HUMAN_VALIDATED: Final[str] = "HUMAN_VALIDATED"
 # --------------------------------------------------------------------------------------
 
 #: Separators used for every canonical digest. Deterministic across restart, locale,
-#: time zone and hash seed (invariant A24, gate G22).
+#: time zone and hash seed.
 CANONICAL_JSON_SEPARATORS: Final[tuple[str, str]] = (",", ":")
 
 #: Decimal places used when serialising a rate. Fixed so that the same arithmetic yields
-#: the same bytes on every platform (design section 6.1).
+#: the same bytes on every platform.
 RATE_DECIMAL_PLACES: Final[int] = 6

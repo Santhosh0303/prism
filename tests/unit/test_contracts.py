@@ -1,4 +1,4 @@
-"""Contract tests — implementation plan Task 3, Step 1.
+"""Contract tests.
 
 These are written before ``prism.contracts`` exists. They define the public shape rather
 than describe it after the fact.
@@ -81,7 +81,7 @@ def test_confidence_rejects_out_of_range(value: int) -> None:
 
 @pytest.mark.parametrize("value", ["75", 75.5, True])
 def test_confidence_is_not_coerced(value: object) -> None:
-    """Design section 6.1: no coercive confidence parsing."""
+    """No coercive confidence parsing: a string or a float is a caller mistake."""
     with pytest.raises(ValidationError):
         Claim(
             claim_id="c-1",
@@ -180,7 +180,7 @@ def test_source_label_length_is_bounded() -> None:
 
 
 # --------------------------------------------------------------------------------------
-# provenance: invariant A15 / gate G18
+# provenance: only source_group_id can raise diversity, labels never can
 # --------------------------------------------------------------------------------------
 
 

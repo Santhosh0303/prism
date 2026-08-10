@@ -1,11 +1,10 @@
 """Deterministic task classification.
 
 No LLM, no embedding, no probability. The same text always produces the same profile, on
-every platform, in every locale, under any hash seed (invariant A24).
+every platform, in every locale, under any hash seed.
 
 The output deliberately reports raw integer scores rather than a normalised "confidence"
-number, because a fabricated probability would imply a calibration that does not exist
-(design section 6.4 step 7).
+number, because a fabricated probability would imply a calibration that does not exist.
 """
 
 from __future__ import annotations

@@ -1,8 +1,8 @@
-"""Limit tests — implementation plan Task 3, Step 1.
+"""Limit tests.
 
-Limits are a denial-of-service control (design section 14.8) and must be enforced before
-any model is loaded. These tests assert both the values themselves, which are pinned by
-design section 6.2, and that they reject rather than truncate.
+Limits are a denial-of-service control and must be enforced before any model is loaded.
+These tests assert both the pinned values themselves and that they reject rather than
+truncate.
 """
 
 from __future__ import annotations
@@ -14,12 +14,12 @@ from prism import limits
 from prism.errors import ErrorCode, PrismError
 
 # --------------------------------------------------------------------------------------
-# the constants are pinned by the design document, not chosen by the implementation
+# the constants are pinned values, not whatever the implementation happens to use
 # --------------------------------------------------------------------------------------
 
 
-def test_limit_values_match_the_design_document() -> None:
-    """Design section 6.2. A drift here is a cross-document integrity failure."""
+def test_limit_values_are_the_pinned_ones() -> None:
+    """These numbers are published. A drift here silently changes the public contract."""
     assert limits.MAX_INPUT_BYTES == 256 * 1024
     assert limits.MAX_TASK_WORDS == 4_000
     assert limits.MAX_CANDIDATES == 5
@@ -68,7 +68,7 @@ def test_input_above_the_limit_raises_typed_limit_error() -> None:
 
 
 def test_limit_error_message_contains_no_raw_content() -> None:
-    """Invariant A18: diagnostics are content-free."""
+    """Diagnostics are content-free."""
     secret = "SUPER-SECRET-TASK-TEXT"
     with pytest.raises(PrismError) as excinfo:
         limits.validate_input_size(limits.MAX_INPUT_BYTES + len(secret))
@@ -102,12 +102,12 @@ def test_task_at_word_limit_is_accepted() -> None:
 
 
 # --------------------------------------------------------------------------------------
-# typed failure surface — invariant A25 / gate G28
+# typed failure surface: every error carries code, retryability, component, next action
 # --------------------------------------------------------------------------------------
 
 
 def test_every_error_code_declares_recovery_metadata() -> None:
-    """A25: an operator must be able to act on the error without reading a traceback."""
+    """An operator must be able to act on the error without reading a traceback."""
     for code in ErrorCode:
         meta = ErrorCode.recovery(code)
         assert meta.component, code

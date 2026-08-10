@@ -8,7 +8,7 @@ The verification order is deliberate: **verify, then load**. Every listed file i
 to a canonical path, confirmed to sit beneath the model root, confirmed to be a regular
 file rather than a link, size-checked, and hashed — before ONNX Runtime is allowed to open
 anything. A mismatch raises ``MODEL_INTEGRITY_FAILURE`` and measurement fails closed;
-preflight keeps working (invariant A9).
+preflight keeps working.
 
 Honest limitation, stated rather than buried: the external-data check is a bounded byte
 scan for the ONNX external-data markers plus a sibling-file check. It is not a full
@@ -52,7 +52,7 @@ _EXTERNAL_DATA_SUFFIXES: Final[tuple[str, ...]] = (".onnx_data", ".onnx.data", "
 MAX_SEQUENCE_LENGTH: Final[int] = 256
 
 #: Conservative thread settings. Fixed rather than adaptive so that latency is
-#: reproducible across runs on the same hardware (design section 12.3).
+#: reproducible across runs on the same hardware.
 INTRA_OP_THREADS: Final[int] = 2
 INTER_OP_THREADS: Final[int] = 1
 
@@ -132,7 +132,7 @@ def model_root() -> Path:
 
 
 def measurement_disabled() -> bool:
-    """True when the kill switch is set (design section 19)."""
+    """True when the kill switch is set."""
     return os.environ.get(DISABLE_MEASURE_ENV_VAR, "") not in {"", "0", "false", "False"}
 
 
@@ -307,8 +307,8 @@ class ModelSessions:
 
     Concurrent cold callers share one initialisation. Duplicate sessions are a
     release-blocking leak, not a performance detail: two copies of E2 would double a
-    328 MB resident footprint and quietly breach the RSS gate (design section 7,
-    stress probe ST-2).
+    328 MB resident footprint and quietly breach the resident-memory budget. The
+    stress suite asserts that ten simultaneous cold callers create exactly one pair.
     """
 
     _instance: ModelSessions | None = None
@@ -402,7 +402,7 @@ class ModelSessions:
         """Mean-pooled, L2-normalised sentence embeddings from E1.
 
         E1's only job is same-subject relevance. It never produces agreement,
-        contradiction, truth, or confidence (ADR-005).
+        contradiction, truth, or confidence.
         """
         if not texts:
             return np.zeros((0, 1), dtype=np.float32)

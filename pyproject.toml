@@ -25,7 +25,7 @@ dependencies = [
     "tokenizers>=0.21,<1",
 ]
 
-# Runtime direct dependency budget is six (design section 20). Additions require a
+# Runtime direct dependency budget is six. Additions require a
 # documented missing capability, security review, size/startup impact, licence review,
 # alternative analysis, and a removal plan. tests/unit/test_dependency_budget.py enforces this.
 
@@ -146,28 +146,30 @@ root_package = "prism"
 # are analysed rather than silently ignored.
 include_external_packages = true
 
-# ADR-007 / architecture invariant A11: the core must never depend on host adapters.
+# The core must never depend on host adapters: dependency runs one way only, so an
+# integration cannot change measurement behaviour.
 [[tool.importlinter.contracts]]
 name = "Core does not import integrations"
 type = "forbidden"
 source_modules = ["prism"]
 forbidden_modules = ["integrations"]
 
-# Architecture fitness function 1: preflight imports no model runtime.
+# Preflight imports no model runtime, so it keeps working when the bundle is absent.
 [[tool.importlinter.contracts]]
 name = "Preflight imports no inference runtime"
 type = "forbidden"
 source_modules = ["prism.preflight"]
 forbidden_modules = ["onnxruntime", "tokenizers", "numpy"]
 
-# Architecture invariant A5/A10: no execution, network or shell capability in the core.
+# No execution, network or shell capability in the core.
 [[tool.importlinter.contracts]]
 name = "Core has no execution or network capability"
 type = "forbidden"
 source_modules = ["prism"]
 forbidden_modules = ["subprocess", "socket", "http", "urllib", "requests", "httpx", "ftplib", "telnetlib", "smtplib", "webbrowser", "ctypes"]
 
-# ADR-002: no provider SDK may enter the runtime graph.
+# No provider SDK may enter the runtime graph: PRISM measures model output, it does not
+# call models over an API.
 [[tool.importlinter.contracts]]
 name = "No model-provider SDK in core"
 type = "forbidden"

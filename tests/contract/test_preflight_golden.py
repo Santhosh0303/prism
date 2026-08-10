@@ -1,7 +1,7 @@
-"""Golden preflight contracts — implementation plan Task 5, Step 5.
+"""Golden preflight contracts.
 
-Expected result from the plan: "identical perspective order and contract bytes across 100
-repeated runs". Byte identity, not structural similarity, because the drift these tests
+The required property is identical perspective order and contract bytes across 100
+repeated runs. Byte identity, not structural similarity, because the drift these tests
 exist to catch is cosmetic-looking: a reordered set, a reworded rule, a changed budget.
 
 The pinned digests are the golden values. If one changes, that is a semantic change to
@@ -121,7 +121,7 @@ def test_contract_does_not_echo_the_task_text(registry: PerspectiveRegistry) -> 
 
 
 # --------------------------------------------------------------------------------------
-# token budget — success criteria table, section 2.2
+# token budget — the contract is host tokens the user pays for
 # --------------------------------------------------------------------------------------
 
 

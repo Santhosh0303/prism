@@ -2,16 +2,16 @@
 
 ``PrismService`` is the only entry point adapters use. The CLI, the MCP server, and any
 embedding host all call this same object, which is what makes "equivalent behaviour across
-interfaces" a structural property rather than a promise (invariant A2).
+interfaces" a structural property rather than a promise.
 
 Three behaviours live here because they must hold for every caller:
 
 * **Zero-queue admission.** Two measurements may run; a third is refused immediately with
   a typed ``BUSY``. There is no queue, so a burst cannot become hidden background work or
-  a stale result delivered long after it was wanted (invariant A20).
+  a stale result delivered long after it was wanted.
 * **Complete-result atomicity.** A report is fully assembled and validated before it is
   returned. A timeout or crash cannot produce a partial report with a plausible-looking
-  contradiction rate (invariant A17).
+  contradiction rate.
 * **Timeout circuit breaking.** A Python-side timeout does not stop native inference. The
   worker may still be running, so new measurements are refused until it finishes rather
   than piling a second job on top of an unhealthy one.

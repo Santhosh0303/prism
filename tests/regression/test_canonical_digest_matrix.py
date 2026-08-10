@@ -1,7 +1,8 @@
-"""Environment determinism — plan Task 18, Step 2 (gate G22).
+"""Environment determinism.
 
-"Execute identical fixtures ... under at least two locales, two time zones, three
-PYTHONHASHSEED values, and fresh processes ... compare canonical SHA-256."
+Identical fixtures are executed under at least two locales, two time zones, three
+``PYTHONHASHSEED`` values, and fresh processes, and their canonical SHA-256 digests are
+compared.
 
 Each case runs in a **separate process**, which is the point: a digest that is stable
 within one interpreter proves nothing about set iteration order, locale-dependent

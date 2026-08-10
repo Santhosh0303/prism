@@ -1,8 +1,8 @@
-"""Admission, saturation, and recovery — plan Task 18, Steps 6 and 7.
+"""Admission, saturation, and recovery.
 
-Probe ST-1: a 20-client burst must produce at most two active measurements, zero queued,
-and typed BUSY for the rest. Probe ST-2: ten simultaneous cold callers must create exactly
-one E1 and one E2 session.
+Two properties: a 20-client burst must produce at most two active measurements, zero
+queued, and typed BUSY for the rest; and ten simultaneous cold callers must create
+exactly one E1 and one E2 session.
 
 These use a stub measurement so the properties under test are admission and recovery, not
 encoder speed. A real-model burst would measure the CPU, not the design.
@@ -83,7 +83,7 @@ class SlowService(PrismService):
 
 
 # --------------------------------------------------------------------------------------
-# ST-1 — burst admission
+# burst admission
 # --------------------------------------------------------------------------------------
 
 
@@ -170,7 +170,7 @@ def test_repeated_timeouts_trip_the_circuit_rather_than_stacking_work() -> None:
 
 
 # --------------------------------------------------------------------------------------
-# ST-2 — cold session race
+# cold session race
 # --------------------------------------------------------------------------------------
 
 
@@ -204,7 +204,7 @@ def test_ten_cold_callers_create_exactly_one_session_pair() -> None:
 def test_kill_switch_disables_inference_but_not_preflight(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Design section 19: measurement off, deterministic preflight still available."""
+    """Measurement off, deterministic preflight still available."""
     from prism.constants import DISABLE_MEASURE_ENV_VAR
     from prism.contracts import PreflightRequest
 

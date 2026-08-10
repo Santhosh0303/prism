@@ -1,4 +1,4 @@
-"""The agreement truth table — implementation plan Task 8, Step 4.
+"""The agreement truth table.
 
 Every path that could produce an agreement label without the evidence to support it gets
 its own test. The suppressing conditions are the point of the table; the two agreement
@@ -98,7 +98,7 @@ def test_clean_multi_source_is_multi_source_agreement(calibrated: None) -> None:
 
 
 def test_no_label_claims_independence_or_convergence() -> None:
-    """Fitness function: these labels must never reappear. PRISM cannot establish either."""
+    """These labels must never reappear. PRISM cannot establish either."""
     names = {member.name for member in AgreementType}
     assert "INDEPENDENT" not in names
     assert "CONVERGENT" not in names

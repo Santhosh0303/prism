@@ -1,6 +1,6 @@
 """Content-free diagnostics.
 
-Invariant A18: raw task and candidate logging is not implemented, **including in debug
+Raw task and candidate logging is not implemented, **including in debug
 mode**. There is no verbosity level that turns it on, because a debug flag that leaks user
 content is the same leak with an excuse attached.
 
@@ -9,7 +9,7 @@ warning counts. What may never be recorded: task text, claim text, source labels
 environment values, home directories, user-project paths, or model paths.
 
 Output is JSON Lines to stderr, and only when explicitly enabled. There is no telemetry
-exporter and no outbound connection (design section 16).
+exporter and no outbound connection.
 """
 
 from __future__ import annotations

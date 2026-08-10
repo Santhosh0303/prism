@@ -1,6 +1,6 @@
 """Canonical serialisation and digests.
 
-Invariant A24: the same request and artifact set must produce the same digest across
+The same request and artifact set must produce the same digest across
 process restarts, locales, time zones, Python hash seeds, and supported operating
 systems. Adapter-added timestamps are excluded.
 
