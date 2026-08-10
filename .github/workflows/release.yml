@@ -1,0 +1,93 @@
+name: Release
+
+# Runs on a version tag. It builds, gates, and publishes evidence.
+#
+# What it does NOT do yet, stated here rather than implied by the file existing: there is no
+# Sigstore signing, no SLSA provenance attestation, no transparency-log verification, and no
+# trusted publishing to an index. Those are Task 19 work that has not been done. Until they
+# are, this workflow produces a build and its evidence — not an attested release — and the
+# release notes must say so.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Release gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync the locked environment
+        run: uv sync --frozen
+
+      - name: Run every blocking check
+        # Not --strict: the seed corpus does not exist and the baseline is unsigned, so
+        # --strict fails by design on this build. The full report is published either way,
+        # and the SKIP entries are the honest record of what could not be checked.
+        run: uv run python scripts/release_gate.py --text
+
+      - name: Machine-readable gate report
+        if: always()
+        run: uv run python scripts/release_gate.py > release-gate.json || true
+
+      - name: Upload the gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate
+          path: release-gate.json
+
+  build:
+    name: Build and record evidence
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync the locked environment
+        run: uv sync --frozen
+
+      - name: Build
+        run: uv build
+
+      - name: Confirm the build is reproducible
+        run: uv run python scripts/check_reproducible_build.py
+
+      - name: Generate the SBOM
+        run: uv run python scripts/build_sbom.py --output dist/sbom.cdx.json
+
+      - name: Cross-check the SBOM with the uv exporter
+        # Two tools that agree are evidence; one tool is an assertion. The exporter is
+        # preview, so a failure here is recorded rather than blocking.
+        run: uv export --format cyclonedx1.5 > dist/sbom.uv.json || true
+
+      - name: Record artifact hashes
+        run: |
+          cd dist
+          sha256sum * > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Upload the distribution
+        uses: actions/upload-artifact@v4
+        with:
+          name: distribution
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS
+            dist/sbom.cdx.json

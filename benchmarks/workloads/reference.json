@@ -1,0 +1,175 @@
+{
+  "candidates": [
+    {
+      "candidate_id": "lens0",
+      "claims": [
+        {
+          "claim_id": "lens0-0",
+          "confidence": 60,
+          "evidence_status": "INFERRED",
+          "text": "The service is ready for production deployment across all supported regions today. Variant 0."
+        },
+        {
+          "claim_id": "lens0-1",
+          "confidence": 60,
+          "evidence_status": "INFERRED",
+          "text": "A single failed dependency in the payment path takes down the entire checkout flow. Variant 0."
+        },
+        {
+          "claim_id": "lens0-2",
+          "confidence": 60,
+          "evidence_status": "INFERRED",
+          "text": "Latency stays under one second at the current prototype load levels we have tested. Variant 0."
+        },
+        {
+          "claim_id": "lens0-3",
+          "confidence": 60,
+          "evidence_status": "INFERRED",
+          "text": "The retry path drops messages silently whenever the downstream queue rejects them. Variant 0."
+        }
+      ],
+      "perspective": "lens0",
+      "provenance_status": "DECLARED_UNVERIFIED",
+      "source_group_id": "host-pass-001",
+      "source_label": "lens0"
+    },
+    {
+      "candidate_id": "lens1",
+      "claims": [
+        {
+          "claim_id": "lens1-0",
+          "confidence": 61,
+          "evidence_status": "INFERRED",
+          "text": "The service is ready for production deployment across all supported regions today. Variant 1."
+        },
+        {
+          "claim_id": "lens1-1",
+          "confidence": 61,
+          "evidence_status": "INFERRED",
+          "text": "A single failed dependency in the payment path takes down the entire checkout flow. Variant 1."
+        },
+        {
+          "claim_id": "lens1-2",
+          "confidence": 61,
+          "evidence_status": "INFERRED",
+          "text": "Latency stays under one second at the current prototype load levels we have tested. Variant 1."
+        },
+        {
+          "claim_id": "lens1-3",
+          "confidence": 61,
+          "evidence_status": "INFERRED",
+          "text": "The retry path drops messages silently whenever the downstream queue rejects them. Variant 1."
+        }
+      ],
+      "perspective": "lens1",
+      "provenance_status": "DECLARED_UNVERIFIED",
+      "source_group_id": "host-pass-001",
+      "source_label": "lens1"
+    },
+    {
+      "candidate_id": "lens2",
+      "claims": [
+        {
+          "claim_id": "lens2-0",
+          "confidence": 62,
+          "evidence_status": "INFERRED",
+          "text": "The service is ready for production deployment across all supported regions today. Variant 2."
+        },
+        {
+          "claim_id": "lens2-1",
+          "confidence": 62,
+          "evidence_status": "INFERRED",
+          "text": "A single failed dependency in the payment path takes down the entire checkout flow. Variant 2."
+        },
+        {
+          "claim_id": "lens2-2",
+          "confidence": 62,
+          "evidence_status": "INFERRED",
+          "text": "Latency stays under one second at the current prototype load levels we have tested. Variant 2."
+        },
+        {
+          "claim_id": "lens2-3",
+          "confidence": 62,
+          "evidence_status": "INFERRED",
+          "text": "The retry path drops messages silently whenever the downstream queue rejects them. Variant 2."
+        }
+      ],
+      "perspective": "lens2",
+      "provenance_status": "DECLARED_UNVERIFIED",
+      "source_group_id": "host-pass-001",
+      "source_label": "lens2"
+    },
+    {
+      "candidate_id": "lens3",
+      "claims": [
+        {
+          "claim_id": "lens3-0",
+          "confidence": 63,
+          "evidence_status": "INFERRED",
+          "text": "The service is ready for production deployment across all supported regions today. Variant 3."
+        },
+        {
+          "claim_id": "lens3-1",
+          "confidence": 63,
+          "evidence_status": "INFERRED",
+          "text": "A single failed dependency in the payment path takes down the entire checkout flow. Variant 3."
+        },
+        {
+          "claim_id": "lens3-2",
+          "confidence": 63,
+          "evidence_status": "INFERRED",
+          "text": "Latency stays under one second at the current prototype load levels we have tested. Variant 3."
+        },
+        {
+          "claim_id": "lens3-3",
+          "confidence": 63,
+          "evidence_status": "INFERRED",
+          "text": "The retry path drops messages silently whenever the downstream queue rejects them. Variant 3."
+        }
+      ],
+      "perspective": "lens3",
+      "provenance_status": "DECLARED_UNVERIFIED",
+      "source_group_id": "host-pass-001",
+      "source_label": "lens3"
+    },
+    {
+      "candidate_id": "lens4",
+      "claims": [
+        {
+          "claim_id": "lens4-0",
+          "confidence": 64,
+          "evidence_status": "INFERRED",
+          "text": "The service is ready for production deployment across all supported regions today. Variant 4."
+        },
+        {
+          "claim_id": "lens4-1",
+          "confidence": 64,
+          "evidence_status": "INFERRED",
+          "text": "A single failed dependency in the payment path takes down the entire checkout flow. Variant 4."
+        },
+        {
+          "claim_id": "lens4-2",
+          "confidence": 64,
+          "evidence_status": "INFERRED",
+          "text": "Latency stays under one second at the current prototype load levels we have tested. Variant 4."
+        },
+        {
+          "claim_id": "lens4-3",
+          "confidence": 64,
+          "evidence_status": "INFERRED",
+          "text": "The retry path drops messages silently whenever the downstream queue rejects them. Variant 4."
+        }
+      ],
+      "perspective": "lens4",
+      "provenance_status": "DECLARED_UNVERIFIED",
+      "source_group_id": "host-pass-001",
+      "source_label": "lens4"
+    }
+  ],
+  "config": {
+    "include_raw_nli_scores": false,
+    "timeout_seconds": 10.0
+  },
+  "question": "Assess the system design: component boundaries, coupling between services, and the scalability tradeoff of the proposed architecture under enterprise load.",
+  "schema_version": "1.0"
+}

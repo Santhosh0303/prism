@@ -1,0 +1,37 @@
+{
+  "schema_version": "1.0",
+  "baseline_id": "prism-0.1.0-2026-08-11",
+  "supersedes": null,
+  "signature_status": "UNSIGNED",
+  "package_version": "0.1.0",
+  "audit_baseline_id": "PRISM-AUDIT-2026-08-06-C",
+  "recorded_at": "2026-08-11",
+  "workload": "reference.json",
+  "profile": "release",
+  "note": "Median of three consecutive release-profile runs on one idle machine. UNSIGNED: there is no release signing pipeline, so this is a recorded measurement and not attested evidence. Run-to-run spread is recorded below because a single run would imply a precision this workload does not have.",
+  "samples": 3,
+  "hardware": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "processor": "AMD64 Family 25 Model 80 Stepping 0, AuthenticAMD",
+    "logical_cores": 16,
+    "python": "3.12.10"
+  },
+  "metrics": {
+    "preflight_p95_ms": 0.1412,
+    "preflight_p99_ms": 0.1738,
+    "measurement_p50_ms": 3211.68,
+    "measurement_p95_ms": 3391.31,
+    "measurement_p99_ms": 3391.55,
+    "cpu_seconds_per_measurement": 6.48,
+    "peak_rss_bytes": 750071808,
+    "default_report_bytes": 3175,
+    "cold_start_ms": 5308.37
+  },
+  "observed_range": {
+    "measurement_p95_ms": [3153.87, 3468.01],
+    "preflight_p95_ms": [0.1127, 0.1495],
+    "cpu_seconds_per_measurement": [6.17, 6.59],
+    "peak_rss_bytes": [749883392, 750292992],
+    "cold_start_ms": [5184.25, 5748.4]
+  }
+}

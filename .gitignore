@@ -16,13 +16,16 @@ htmlcov/
 .ruff_cache/
 
 # Model bundle weights are downloaded from a pinned immutable revision and verified
-# against models/manifest.json. The manifest is committed; the weights are not.
-models/artifacts/
+# against models/artifacts/manifest.json. The manifest is committed so that a fresh clone
+# can verify a bundle it obtained independently; the weights themselves are not.
+models/artifacts/*
+!models/artifacts/manifest.json
 
-# Local benchmark and evidence output. Signed baselines under benchmarks/baselines/
-# ARE committed; candidate runs are not.
+# Local benchmark and evidence output. Baselines under benchmarks/baselines/ ARE
+# committed; candidate runs are not. Anchored to the root so that it cannot also swallow
+# models/artifacts/.
 benchmarks/out/
-artifacts/
+/artifacts/
 
 # Local environment
 .env

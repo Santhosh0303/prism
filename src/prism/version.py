@@ -31,7 +31,6 @@ MCP_PROTOCOL_VERSION: Final[str] = "2026-07-28"
 #: surfaced in reports so that a result can always be traced to the specification
 #: revision that produced it. A release may not regress to an older baseline.
 AUDIT_BASELINE_ID: Final[str] = "PRISM-AUDIT-2026-08-06-C"
-AUDIT_BASELINE_DOC_VERSION: Final[str] = "1.3"
 
 
 def version_info() -> dict[str, str | int]:

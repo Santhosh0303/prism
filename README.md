@@ -37,8 +37,10 @@ measured. Any such number would be fabricated. Calibrating requires real pre-exi
 outputs harvested with provenance, labelled independently by a second human, with the
 manifest hash committed before any encoder run and the sealed test set scored exactly once.
 
-Also not yet done: an endurance soak, an independent reproducible-build comparison, signed
-release provenance, and a compatibility matrix against pinned prior host releases.
+Also not yet done: a full endurance soak — the in-suite probe is short and catches a leak,
+not a plateau — signed release provenance and artifact signing, and a compatibility matrix
+against pinned prior host releases. The regression baseline is recorded but `UNSIGNED`. See
+[`docs/operations.md`](docs/operations.md) for the complete list of absent controls.
 
 ---
 
@@ -58,15 +60,20 @@ Five delivery shapes over one tested core:
 
 ```bash
 uv sync
-uv run python scripts/verify_models.py --generate   # fetch-free: measures what is on disk
+uv run python scripts/verify_models.py   # fetch-free: hashes what is on disk
 uv run prism health --deep
 ```
 
 The model bundle is two ONNX encoders pinned by immutable upstream revision and SHA-256,
-totalling roughly 403 MB. They are not committed. `scripts/verify_models.py` records what
-is on disk and every subsequent run re-verifies hashes, sizes, and path containment before
-any session is created. See [`docs/model-card.md`](docs/model-card.md) for the exact
-revisions and how to obtain them.
+totalling roughly 403 MB. The weights are not committed; `models/artifacts/manifest.json`
+is, so a clone can verify a bundle it obtained independently. `scripts/verify_models.py`
+hashes what is on disk and compares it against that manifest, and every subsequent run
+re-verifies hashes, sizes, and path containment before any session is created. See
+[`models/README.md`](models/README.md) for how to obtain the artifacts and
+[`docs/model-card.md`](docs/model-card.md) for the exact revisions.
+
+Preflight, synthesis, and health need none of it — PRISM is fully usable without the
+bundle, and `PRISM_DISABLE_MEASURE=1` makes that mode explicit.
 
 ## Use
 
@@ -87,9 +94,11 @@ prism health --deep
 from prism.contracts import MeasureRequest, PreflightRequest
 from prism.service import PrismService
 
+task = "Review this architecture."
+
 service = PrismService.from_default_bundle()
-preflight = service.preflight(PreflightRequest(task="Review this architecture.", mode="standard"))
-measurement = service.measure(MeasureRequest(question="Review this architecture.", candidates=packets))
+preflight = service.preflight(PreflightRequest(task=task, mode="standard"))
+measurement = service.measure(MeasureRequest(question=task, candidates=packets))
 contract = service.synthesis_contract(preflight, measurement)
 ```
 
@@ -129,31 +138,45 @@ Reference workload is the maximum legal one: 5 candidates × 4 claims, every sam
 scored in both directions with no speed floor. 100 preflight calls and 30 measurements
 after warm-up, on AMD64 (AMD, 16 logical cores), Windows 11, Python 3.12.10.
 
-| Metric | Measured | Target | Hard limit |
+| Metric | Measured (worst of 3) | Target | Hard limit |
 |---|---:|---:|---:|
-| Preflight p95 | 0.288 ms | < 15 ms | < 50 ms |
-| Preflight p99 | 0.889 ms | — | < 75 ms |
-| Measurement p95 | **4,876 ms** | < 3,500 ms | < 8,000 ms |
-| Measurement p99 | 5,085 ms | < 9,000 ms | < 10,000 ms |
-| Peak RSS | 755 MB | < 2.2 GB | < 3 GB |
+| Preflight p95 | 0.150 ms | < 15 ms | < 50 ms |
+| Preflight p99 | 0.228 ms | — | < 75 ms |
+| Measurement p95 | 3,468 ms | < 3,500 ms | < 8,000 ms |
+| Measurement p99 | 3,579 ms | < 9,000 ms | < 10,000 ms |
+| Peak RSS | 750 MB | < 2.2 GB | < 3 GB |
 | Default report size | 3,175 bytes | < 6 KB | < 12 KB |
-| Cold start | 8,088 ms | reported, not gated | — |
+| Cold start | 5,748 ms | reported, not gated | — |
 
-**Measurement p95 misses its 3,500 ms target.** It is inside the hard limit, so it does not
-block, but it is a miss and is reported as one. Expect roughly five seconds for a full
-five-lens measurement on comparable hardware. Preflight is effectively free.
+Measurement p95 landed between 3,154 ms and 3,468 ms across the three runs — inside the
+3,500 ms target, but by less than the run-to-run spread itself, so read "meets target" as
+provisional on this hardware. A busier or slower machine will miss it. An earlier run
+published 4,876 ms; it was taken under other load and is not comparable. Full per-run
+figures are in [`docs/performance.md`](docs/performance.md). Preflight is effectively free.
 
 ## Verification
 
 ```
-403 tests passing
+433 tests passing, 2 deselected (endurance)
 ruff check + ruff format --check    clean
-mypy --strict (src + tests)         no issues, 58 files
+mypy --strict (src + tests)         no issues, 66 files
 bandit                              0 issues
 vulture / deptry                    0 findings / no issues
 import-linter                       5 architecture contracts kept, 0 broken
-pip-audit (resolved lock)           no known vulnerabilities, 46 packages
+pip-audit (exported lock)           no known vulnerabilities
+reproducible build                  two clean builds, identical normalised digest
 ```
+
+One command runs all of it:
+
+```bash
+uv run python scripts/release_gate.py --text
+```
+
+Sixteen gates pass and one reports `SKIP`: there is no evaluation corpus, so no accuracy
+figure can be published. Under `--strict` a skip blocks and the unsigned baseline blocks
+too, so **`--strict` fails on this build by design** — a check that did not run has not
+passed.
 
 Notable properties under test: canonical digest parity across the Python API, CLI, and MCP
 server; determinism across nine environment permutations in fresh processes, including the

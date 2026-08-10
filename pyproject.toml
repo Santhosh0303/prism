@@ -59,11 +59,9 @@ dev = [
 line-length = 100
 target-version = "py312"
 src = ["src", "tests"]
-# Ruff formats Python code blocks embedded in Markdown. The three audit baseline
-# documents at the repository root are hash-anchored evidence, not source code: a
-# cosmetic reformat of a fenced block silently breaks their digest. Exclude all
-# Markdown, and confine linting to the code trees.
-# tests/unit/test_baseline_integrity.py is the backstop if this config is ever relaxed.
+# Documentation prose is not source code. Fenced examples in Markdown are written to be
+# read, sometimes deliberately elided, and must not be rewritten by a formatter that gains
+# Markdown support in a future release. Linting stays confined to the code trees below.
 extend-exclude = ["*.md"]
 include = [
     "src/**/*.py",
@@ -93,6 +91,9 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.12"
+# The gate scripts are a flat package on sys.path, not an installed one. Without this, the
+# mutation suite that proves those gates work cannot be type-checked at all.
+mypy_path = "scripts"
 strict = true
 warn_unused_configs = true
 warn_unreachable = true
@@ -115,7 +116,10 @@ warn_return_any = false
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
-addopts = "-q --strict-markers --strict-config"
+# The endurance marker is deselected by default. A soak belongs on a dedicated machine, and
+# a slow blocking test is one people learn to skip. Run it explicitly:
+#   uv run pytest tests/endurance -m endurance
+addopts = "-q --strict-markers --strict-config -m 'not endurance'"
 timeout = 120
 markers = [
     "slow: takes more than a few seconds",
@@ -139,6 +143,10 @@ paths = ["src", "tests"]
 
 [tool.deptry]
 known_first_party = ["prism"]
+# benchmarks/ and scripts/ are developer tooling, not part of the distributed package. Their
+# imports are dev-group packages and flat sibling modules, neither of which belongs in the
+# runtime dependency budget this check exists to protect.
+extend_exclude = ["benchmarks", "scripts"]
 
 [tool.importlinter]
 root_package = "prism"

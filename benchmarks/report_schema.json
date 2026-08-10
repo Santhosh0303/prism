@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Santhosh0303/prism/schemas/benchmark-report.schema.json",
+  "title": "PRISM benchmark report",
+  "description": "Shape of benchmarks/out/run.json as written by benchmarks/run.py. Hardware is required: a latency number without the machine that produced it is not evidence, and a baseline comparison across different hardware is meaningless rather than merely imprecise.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "package_version",
+    "profile",
+    "workload",
+    "hardware",
+    "preflight",
+    "measurement",
+    "cold_start_ms",
+    "cpu_seconds_per_measurement",
+    "peak_rss_bytes",
+    "default_report_bytes"
+  ],
+  "properties": {
+    "package_version": { "type": "string", "minLength": 1 },
+    "profile": {
+      "description": "Only the release profile is release evidence. The smoke profile takes too few samples for a p95 to mean anything.",
+      "enum": ["smoke", "release"]
+    },
+    "workload": {
+      "description": "Filename in benchmarks/workloads/. Two runs of different workloads are not comparable.",
+      "type": "string",
+      "minLength": 1
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["platform", "processor", "logical_cores", "python"],
+      "properties": {
+        "platform": { "type": "string", "minLength": 1 },
+        "processor": { "type": "string", "minLength": 1 },
+        "logical_cores": { "type": "integer", "minimum": 1 },
+        "python": { "type": "string", "minLength": 1 }
+      }
+    },
+    "preflight": { "$ref": "#/$defs/distribution" },
+    "measurement": { "$ref": "#/$defs/distribution" },
+    "cold_start_ms": {
+      "description": "Reported, never gated, and never folded into a warm percentile.",
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "cpu_seconds_per_measurement": { "type": "number", "exclusiveMinimum": 0 },
+    "peak_rss_bytes": { "type": "integer", "exclusiveMinimum": 0 },
+    "default_report_bytes": { "type": ["integer", "null"], "minimum": 0 }
+  },
+  "$defs": {
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "p50_ms", "p95_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": { "type": "number", "minimum": 1 },
+        "p50_ms": { "type": "number", "minimum": 0 },
+        "p95_ms": { "type": "number", "minimum": 0 },
+        "p99_ms": { "type": "number", "minimum": 0 },
+        "max_ms": { "type": "number", "minimum": 0 },
+        "median_absolute_deviation_ms": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

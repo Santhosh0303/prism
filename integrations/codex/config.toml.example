@@ -11,8 +11,8 @@ command = "prism-mcp"
 args = []
 
 # Optional. Point at a dedicated read-only directory holding the verified model
-# bundle. Artifacts are hash-checked against models/manifest.json before any
-# session is created.
+# bundle. Artifacts are hash-checked against models/artifacts/manifest.json
+# before any session is created.
 # env = { PRISM_MODEL_ROOT = "/opt/prism/models" }
 
 # Kill switch. Set to disable all inference while keeping deterministic preflight

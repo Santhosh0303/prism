@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Santhosh0303/prism/schemas/registry.schema.json",
+  "title": "PRISM perspective registry",
+  "description": "Machine-readable shape of registry.yaml, published so that an operator vendoring a lens set through PRISM_REGISTRY_PATH can validate it with ordinary tooling before PRISM ever sees it. This schema is documentation, not the enforcement point: prism.preflight.registry.PerspectiveRegistry.load is authoritative and applies rules JSON Schema cannot express, including symmetric mutual exclusion, resolvable exclusion targets, adversarial/constructive balance, rejection of YAML anchors and tabs, and the critical-lens satisfiability rule. tests/unit/preflight/test_registry_schema.py fails if the two drift apart.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "perspectives"],
+  "properties": {
+    "version": {
+      "description": "Semantic version of the registry content. Any semantic change to a lens requires a bump; the report carries it so a routing decision is always traceable.",
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "perspectives": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/perspective" }
+    }
+  },
+  "$defs": {
+    "perspectiveId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "perspective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "purpose", "questions", "claim_budget", "risk_tags"],
+      "properties": {
+        "id": {
+          "description": "Stable identifier. Appears in every preflight report, so renaming one is a breaking change.",
+          "$ref": "#/$defs/perspectiveId"
+        },
+        "purpose": {
+          "description": "What this lens is responsible for, in one line, addressed to the host model.",
+          "type": "string",
+          "minLength": 1
+        },
+        "questions": {
+          "description": "The required questions the lens must answer. Bounded so that one lens cannot consume the host's whole analysis budget.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "mutually_exclusive_with": {
+          "description": "Lenses that must never be selected alongside this one. Must be symmetric and must resolve to declared ids; the loader enforces both.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/perspectiveId" },
+          "default": []
+        },
+        "claim_budget": {
+          "description": "Maximum claims the host may return for this lens. Bounded by MAX_CLAIMS_PER_CANDIDATE.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "risk_tags": {
+          "description": "Closed vocabulary. Every lens is exactly one of adversarial or constructive; critical marks a lens as mandatory or near-mandatory for high-consequence work.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["adversarial", "constructive", "critical"] }
+        }
+      }
+    }
+  }
+}

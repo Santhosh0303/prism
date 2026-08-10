@@ -26,52 +26,29 @@ sys.path.insert(0, str(REPO_ROOT / "src"))
 import psutil  # noqa: E402
 
 from prism.contracts import (  # noqa: E402
-    CandidatePacket,
-    Claim,
-    EvidenceStatus,
     MeasureRequest,
     PreflightRequest,
     PrismMode,
-    ProvenanceStatus,
 )
 from prism.service import PrismService  # noqa: E402
 from prism.version import PACKAGE_VERSION  # noqa: E402
 
-TASK = (
-    "Assess the system design: component boundaries, coupling between services, "
-    "and the scalability tradeoff of the proposed architecture under enterprise load."
-)
-
-CLAIM_TEXTS = [
-    "The service is ready for production deployment across all supported regions today.",
-    "A single failed dependency in the payment path takes down the entire checkout flow.",
-    "Latency stays under one second at the current prototype load levels we have tested.",
-    "The retry path drops messages silently whenever the downstream queue rejects them.",
-]
+#: The declared reference workload, held as data rather than built in code so that the
+#: benchmark, the offline-network check, and any future comparison all measure the same
+#: input. A latency series is only comparable against another run of the identical
+#: workload; regenerating it from code that has drifted silently invalidates the baseline.
+WORKLOADS = REPO_ROOT / "benchmarks" / "workloads"
+REFERENCE_WORKLOAD = WORKLOADS / "reference.json"
 
 
-def reference_request(candidates: int = 5, claims: int = 4) -> MeasureRequest:
-    """The declared reference workload: five perspectives, four claims each."""
-    packets = tuple(
-        CandidatePacket(
-            candidate_id=f"lens{index}",
-            source_group_id="host-pass-001",
-            source_label=f"lens{index}",
-            provenance_status=ProvenanceStatus.DECLARED_UNVERIFIED,
-            perspective=f"lens{index}",
-            claims=tuple(
-                Claim(
-                    claim_id=f"lens{index}-{position}",
-                    text=f"{CLAIM_TEXTS[position % len(CLAIM_TEXTS)]} Variant {index}.",
-                    confidence=60 + index,
-                    evidence_status=EvidenceStatus.INFERRED,
-                )
-                for position in range(claims)
-            ),
-        )
-        for index in range(candidates)
-    )
-    return MeasureRequest(question=TASK, candidates=packets)
+def load_workload(path: Path | None = None) -> MeasureRequest:
+    """Load a workload file as a validated request. Five perspectives, four claims each."""
+    source = path if path is not None else REFERENCE_WORKLOAD
+    return MeasureRequest.model_validate_json(source.read_text(encoding="utf-8"))
+
+
+def workload_task(path: Path | None = None) -> str:
+    return load_workload(path).question
 
 
 def distribution(samples: list[float]) -> dict[str, float]:
@@ -99,6 +76,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--profile", choices=("smoke", "release"), default="smoke")
     parser.add_argument("--output", default=None)
+    parser.add_argument("--workload", default=None, help="workload file; defaults to reference")
     args = parser.parse_args()
 
     preflight_samples = 100 if args.profile == "release" else 20
@@ -106,7 +84,9 @@ def main() -> int:
 
     process = psutil.Process()
     service = PrismService.from_default_bundle()
-    request = reference_request()
+    workload_path = Path(args.workload) if args.workload else REFERENCE_WORKLOAD
+    request = load_workload(workload_path)
+    task = request.question
 
     # Warm-up is excluded: cold start is reported separately, never folded into p95.
     cold_started = time.perf_counter()
@@ -116,7 +96,7 @@ def main() -> int:
     preflight_latencies: list[float] = []
     for _ in range(preflight_samples):
         started = time.perf_counter()
-        service.preflight(PreflightRequest(task=TASK, mode=PrismMode.CRITICAL))
+        service.preflight(PreflightRequest(task=task, mode=PrismMode.CRITICAL))
         preflight_latencies.append((time.perf_counter() - started) * 1000)
 
     cpu_before = process.cpu_times()
@@ -133,6 +113,7 @@ def main() -> int:
     result: dict[str, Any] = {
         "package_version": PACKAGE_VERSION,
         "profile": args.profile,
+        "workload": workload_path.name,
         "hardware": {
             "platform": platform.platform(),
             "processor": platform.processor() or "unknown",

@@ -13,12 +13,16 @@ response.
 | | E1 — relevance | E2 — natural language inference |
 |---|---|---|
 | Repository | `sentence-transformers/all-MiniLM-L6-v2` | `cross-encoder/nli-MiniLM2-L6-H768` |
-| Revision | `1110a243fdf4706b3f48f1d95db1a4f5529b4d41` | `b95119ce93d3e065de6214e38cd4a97b0f2f2c6d` |
 | Licence | Apache-2.0 | Apache-2.0 |
 | Variant | fp32 `onnx/model.onnx` | fp32 `onnx/model.onnx` |
 | Size | 90,405,214 bytes | 328,649,957 bytes |
 | Tokenizer | WordPiece (`vocab.txt`) | BPE (`vocab.json` + `merges.txt`) |
 | Max sequence | 256 tokens (PRISM cap) | 256 tokens (PRISM cap) |
+
+Pinned revisions, resolved once and never followed:
+
+- E1 — `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`
+- E2 — `b95119ce93d3e065de6214e38cd4a97b0f2f2c6d`
 
 Total bundle: 13 files, 422,366,141 bytes. Manifest digest is emitted in every measured
 report so the artifacts behind a result are always identifiable.
@@ -122,8 +126,8 @@ the same as getting it.
 
 The external-data check is a bounded byte scan for the ONNX external-data markers plus a
 companion-file check. It is **not** a full protobuf parse — that would require an `onnx`
-dependency, and the runtime dependency budget is capped at six packages. It catches the realistic case;
-it is recorded here as a limitation rather than presented as proof.
+dependency, and the runtime dependency budget is capped at six packages. It catches the
+realistic case; it is recorded here as a limitation rather than presented as proof.
 
 ## Provenance
 

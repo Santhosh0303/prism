@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "status": "NO_CORPUS",
+  "locked_at": null,
+  "note": "No evaluation corpus exists. The contradiction threshold is therefore uncalibrated, and every report suppresses its authoritative contradiction fields. Populating this lock is the only route to publishing a precision, recall, F1, or MCC number.",
+  "seeds": []
+}

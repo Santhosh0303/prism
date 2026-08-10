@@ -2,7 +2,7 @@
 
 Two modes, one source of truth:
 
-* ``--generate`` measures the artifacts on disk and writes ``models/manifest.json``.
+* ``--generate`` measures the artifacts on disk and writes ``models/artifacts/manifest.json``.
   Every hash, size, and revision is measured here, never transcribed from an upstream API
   response or a third party's report.
 * default (verify) re-reads the manifest and re-verifies every artifact, which is what CI
