@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+dist/
+build/
+
+# Test and coverage artifacts
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+
+# Model bundle weights are downloaded from a pinned immutable revision and verified
+# against models/manifest.json. The manifest is committed; the weights are not.
+models/artifacts/
+
+# Local benchmark and evidence output. Signed baselines under benchmarks/baselines/
+# ARE committed; candidate runs are not.
+benchmarks/out/
+artifacts/
+
+# Local environment
+.env

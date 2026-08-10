@@ -1,0 +1,175 @@
+[project]
+name = "prism"
+version = "0.1.0"
+description = "Local-first, model-agnostic reasoning preflight and contradiction-measurement component for AI harnesses."
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [
+    { name = "Sai Santhosh Bellam", email = "bellam03santhosh@gmail.com" }
+]
+requires-python = ">=3.12,<3.13"
+keywords = ["mcp", "reasoning", "contradiction", "nli", "perspectives", "local-first"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
+]
+dependencies = [
+    "mcp>=2,<3",
+    "numpy>=2,<3",
+    "onnxruntime>=1.20,<2",
+    "pydantic>=2,<3",
+    "pyyaml>=6,<7",
+    "tokenizers>=0.21,<1",
+]
+
+# Runtime direct dependency budget is six (design section 20). Additions require a
+# documented missing capability, security review, size/startup impact, licence review,
+# alternative analysis, and a removal plan. tests/unit/test_dependency_budget.py enforces this.
+
+[project.scripts]
+prism = "prism.cli:main"
+prism-mcp = "prism.mcp_server:main"
+
+[build-system]
+requires = ["uv_build>=0.11.13,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4",
+    "deptry>=0.25.1",
+    "hypothesis>=6.165.2",
+    "import-linter>=2.13",
+    "mypy>=2.3.0",
+    "pip-audit>=2.10.1",
+    "psutil>=7.2.2",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-xdist>=3.8.0",
+    "ruff>=0.16.2",
+    "types-pyyaml>=6.0.12.20260724",
+    "vulture>=2.16",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+# Ruff formats Python code blocks embedded in Markdown. The three audit baseline
+# documents at the repository root are hash-anchored evidence, not source code: a
+# cosmetic reformat of a fenced block silently breaks their digest. Exclude all
+# Markdown, and confine linting to the code trees.
+# tests/unit/test_baseline_integrity.py is the backstop if this config is ever relaxed.
+extend-exclude = ["*.md"]
+include = [
+    "src/**/*.py",
+    "tests/**/*.py",
+    "scripts/**/*.py",
+    "benchmarks/**/*.py",
+    "pyproject.toml",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "PTH", "SIM", "TID", "RUF", "S"]
+ignore = [
+    "S101",    # assert is the test idiom; module-load invariants use raise instead
+    "TID252",  # package-internal relative imports are intentional and keep the
+               # core relocatable; cross-package boundaries are enforced by
+               # import-linter, which is the control that actually matters
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S311"]
+
+
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unused_configs = true
+warn_unreachable = true
+disallow_any_unimported = true
+no_implicit_reexport = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = ["onnxruntime.*", "tokenizers.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+timeout = 120
+markers = [
+    "slow: takes more than a few seconds",
+    "models: requires the verified local ONNX model bundle",
+    "stress: burst, flood, cold-race and recovery probes",
+    "endurance: long-duration soak; excluded from the default run",
+    "benchmark: latency/resource measurement, not a correctness assertion",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src/prism"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+
+[tool.vulture]
+min_confidence = 90
+paths = ["src", "tests"]
+
+[tool.deptry]
+known_first_party = ["prism"]
+
+[tool.importlinter]
+root_package = "prism"
+# Required so that forbidden third-party modules (onnxruntime, torch, requests, ...)
+# are analysed rather than silently ignored.
+include_external_packages = true
+
+# ADR-007 / architecture invariant A11: the core must never depend on host adapters.
+[[tool.importlinter.contracts]]
+name = "Core does not import integrations"
+type = "forbidden"
+source_modules = ["prism"]
+forbidden_modules = ["integrations"]
+
+# Architecture fitness function 1: preflight imports no model runtime.
+[[tool.importlinter.contracts]]
+name = "Preflight imports no inference runtime"
+type = "forbidden"
+source_modules = ["prism.preflight"]
+forbidden_modules = ["onnxruntime", "tokenizers", "numpy"]
+
+# Architecture invariant A5/A10: no execution, network or shell capability in the core.
+[[tool.importlinter.contracts]]
+name = "Core has no execution or network capability"
+type = "forbidden"
+source_modules = ["prism"]
+forbidden_modules = ["subprocess", "socket", "http", "urllib", "requests", "httpx", "ftplib", "telnetlib", "smtplib", "webbrowser", "ctypes"]
+
+# ADR-002: no provider SDK may enter the runtime graph.
+[[tool.importlinter.contracts]]
+name = "No model-provider SDK in core"
+type = "forbidden"
+source_modules = ["prism"]
+forbidden_modules = ["openai", "anthropic", "google", "cohere", "mistralai", "torch", "tensorflow", "jax", "transformers", "langchain", "langgraph", "crewai", "autogen"]
+
+# Layering: adapters sit above the service facade, which sits above the engines.
+[[tool.importlinter.contracts]]
+name = "Adapter / service / engine layering"
+type = "layers"
+layers = [
+    "prism.cli | prism.mcp_server",
+    "prism.service",
+    "prism.synthesis | prism.measure | prism.preflight",
+    "prism.contracts",
+    "prism.limits | prism.errors | prism.constants | prism.version",
+]
