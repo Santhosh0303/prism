@@ -1,0 +1,20 @@
+# PRISM local MCP server for Codex.
+#
+# Invokes the already installed, version-pinned executable. Runtime package
+# resolution (uvx, npx, mutable tags, network URLs) is prohibited: resolving a
+# package at server start is a supply-chain risk the design explicitly bans.
+#
+# Verified against the Codex MCP configuration shape on 2026-08-10.
+
+[mcp_servers.prism]
+command = "prism-mcp"
+args = []
+
+# Optional. Point at a dedicated read-only directory holding the verified model
+# bundle. Artifacts are hash-checked against models/manifest.json before any
+# session is created.
+# env = { PRISM_MODEL_ROOT = "/opt/prism/models" }
+
+# Kill switch. Set to disable all inference while keeping deterministic preflight
+# available, for use when a native-runtime or model advisory has no fix yet.
+# env = { PRISM_DISABLE_MEASURE = "1" }

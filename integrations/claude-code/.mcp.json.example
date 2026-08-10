@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "prism": {
+      "command": "prism-mcp",
+      "args": [],
+      "env": {}
+    }
+  }
+}

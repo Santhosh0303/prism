@@ -438,7 +438,11 @@ class ModelSessions:
         exponentials = np.exp(shifted)
         probabilities = exponentials / exponentials.sum(axis=1, keepdims=True)
         index = self._contradiction_index
-        assert index is not None  # established in __init__
+        if index is None:  # pragma: no cover - established in __init__
+            raise PrismError(
+                code=ErrorCode.MODEL_INTEGRITY_FAILURE,
+                message="The NLI contradiction index is unset.",
+            )
         return probabilities[:, index]
 
     def describe(self) -> dict[str, Any]:
