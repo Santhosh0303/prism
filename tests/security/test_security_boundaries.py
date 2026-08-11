@@ -247,6 +247,29 @@ def test_external_data_companion_file_is_refused(tmp_path: Path) -> None:
     assert excinfo.value.code is ErrorCode.MODEL_INTEGRITY_FAILURE
 
 
+def test_a_hardlinked_artifact_is_refused(tmp_path: Path) -> None:
+    """A second name for the same inode is a name outside the verified root.
+
+    The bytes hash correctly, which is the point: containment and the symlink check both
+    pass, and the file can still be rewritten through the other name after verification.
+    """
+    import os
+
+    manifest = manifest_fixture(tmp_path)
+    target = tmp_path / "e1" / "onnx" / "model.onnx"
+    try:
+        os.link(target, tmp_path / "second-name.bin")
+    except (OSError, NotImplementedError) as error:  # pragma: no cover - platform gate
+        pytest.skip(f"this platform refused hard-link creation: {type(error).__name__}")
+    if target.stat().st_nlink <= 1:  # pragma: no cover - filesystem gate
+        pytest.skip("this filesystem does not report a link count")
+
+    with pytest.raises(PrismError) as excinfo:
+        verify_model_bundle(manifest, tmp_path)
+    assert excinfo.value.code is ErrorCode.MODEL_INTEGRITY_FAILURE
+    assert "hard link" in excinfo.value.message.casefold()
+
+
 @pytest.mark.parametrize("escape", ["../outside.onnx", "/etc/passwd", "e1/../../outside.onnx"])
 def test_path_traversal_in_the_manifest_is_refused(tmp_path: Path, escape: str) -> None:
     manifest = manifest_fixture(tmp_path)

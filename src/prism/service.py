@@ -45,7 +45,7 @@ from .limits import MAX_CONCURRENT_MEASUREMENTS
 from .measure.agreement import agreement_type
 from .measure.calibration import calibration_status
 from .measure.contradiction import build_ledger, detect_internal_conflicts
-from .measure.models import ModelSessions, measurement_disabled
+from .measure.models import ModelSessions, manifest_present, measurement_disabled
 from .measure.pair import enumerate_pairs
 from .measure.project import build_measure_report
 from .measure.retention import retain_distinct_claims
@@ -355,7 +355,24 @@ class PrismService:
                     )
                 )
         else:
-            measurement_available = not disabled
+            # Shallow health does not verify artifacts, so it cannot claim measurement
+            # works — but "the kill switch is off" was never evidence that a bundle
+            # exists, and a clone without one reported available. A presence check is
+            # cheap and honest: no manifest, no availability claim.
+            present = manifest_present(self._model_root)
+            measurement_available = present
+            components.append(
+                ComponentHealth(
+                    name="measurement",
+                    healthy=True,
+                    detail=(
+                        "model manifest present; artifacts unverified in shallow mode, "
+                        "run deep health to verify"
+                        if present
+                        else "no model manifest beneath the model root; preflight remains available"
+                    ),
+                )
+            )
 
         status = (
             PrismStatus.OK
