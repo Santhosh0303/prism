@@ -27,6 +27,16 @@ Pinned revisions, resolved once and never followed:
 Total bundle: 13 files, 422,366,141 bytes. Manifest digest is emitted in every measured
 report so the artifacts behind a result are always identifiable.
 
+**The committed `models/artifacts/manifest.json` is the trust anchor.** It is in the
+repository, so every hash, size, and revision PRISM will accept is reviewable in a diff.
+On its own it proves one thing: the bytes on disk are unchanged since that manifest was
+written. What ties it to upstream is the acquisition step —
+`scripts/verify_models.py` never fetches anything, while `scripts/acquire_models.py`
+fetches each file from the immutable revisions above, refuses any reference that can move,
+and keeps only what hashes to the value already committed. `--generate` will not overwrite
+the anchor without `--overwrite-manifest`, so trust metadata cannot be minted from
+whatever bytes happen to be on disk. See [`../models/README.md`](../models/README.md).
+
 **fp32 was chosen deliberately over the available qint8/quint8 variants.** Quantisation
 shifts NLI scores, and there is no calibrated threshold to absorb that drift. Revisit only
 after a human-labelled corpus exists.

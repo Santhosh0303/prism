@@ -63,8 +63,13 @@ Six steps, in order. Each is verifiable; none requires trusting that a previous 
    pinned revisions from `docs/model-card.md`, and run:
 
    ```bash
+   uv run python scripts/acquire_models.py
    uv run python scripts/verify_models.py
    ```
+
+   `acquire_models.py` fetches only the immutable revisions the committed manifest names
+   and discards anything that does not hash to it; a bundle restored by hand is fine too,
+   and the verification step is the same.
 
    Do not run `--generate` here. That rewrites the manifest from whatever is on disk, which
    would make a tampered bundle verify cleanly — it destroys the exact control you are

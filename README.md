@@ -68,7 +68,10 @@ The model bundle is two ONNX encoders pinned by immutable upstream revision and 
 totalling roughly 403 MB. The weights are not committed; `models/artifacts/manifest.json`
 is, so a clone can verify a bundle it obtained independently. `scripts/verify_models.py`
 hashes what is on disk and compares it against that manifest, and every subsequent run
-re-verifies hashes, sizes, and path containment before any session is created. See
+re-verifies hashes, sizes, and path containment before any session is created.
+`scripts/acquire_models.py` is the step that ties that manifest to upstream: it fetches
+only the pinned 40-character revisions, refuses any reference that can move, and keeps
+nothing that fails the committed hash. See
 [`models/README.md`](models/README.md) for how to obtain the artifacts and
 [`docs/model-card.md`](docs/model-card.md) for the exact revisions.
 
