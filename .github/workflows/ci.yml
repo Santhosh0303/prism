@@ -170,6 +170,15 @@ jobs:
         # having it.
         run: uv run pytest -m "models and not endurance" -q
 
+      - name: Offline gate, including the measurement path
+        # security.yml runs this gate with --skip-measure, because it has no bundle. That
+        # leaves the measured branch of G8 -- the one with a deadline, and the one that
+        # used to time out on its own model load -- running nowhere but a maintainer's
+        # machine. This is the only job that can run it whole, so it does.
+        # measure_seconds against deadline_seconds is printed, so the margin on runner
+        # hardware is a number in the log rather than an assumption.
+        run: uv run python scripts/verify_offline.py --json
+
   reproducible-build:
     name: Reproducible build
     runs-on: ubuntu-latest
