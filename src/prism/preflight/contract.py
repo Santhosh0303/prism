@@ -96,6 +96,7 @@ def build_preflight_contract(
         mode=request.mode,
         registry_version=registry.version,
         registry_hash=registry.content_hash,
+        registry_origin=registry.origin,
         perspectives=instructions,
         execution_contract=ExecutionContract(
             max_claims_per_perspective=max_claims,

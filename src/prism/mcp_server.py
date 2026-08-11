@@ -16,6 +16,7 @@ safe next action, and a content-free request id.
 
 from __future__ import annotations
 
+import json
 import sys
 from typing import Any
 
@@ -29,10 +30,10 @@ from .contracts import (
     MeasureRequest,
     PreflightReport,
     PreflightRequest,
-    PrismMode,
     parse_payload,
 )
 from .errors import ErrorCode, PrismError
+from .limits import validate_input_size
 from .service import PrismService
 from .telemetry import new_request_id
 from .version import MCP_PROTOCOL_VERSION, PACKAGE_VERSION
@@ -56,6 +57,18 @@ def service() -> PrismService:
     if _service is None:
         _service = PrismService.from_default_bundle()
     return _service
+
+
+def _checked(payload: object) -> object:
+    """Apply the byte gate to an external payload before the contract parse.
+
+    The transport has already materialised the arguments, so this is a measurement of
+    what arrived rather than a bound on the read. It is still the only byte-denominated
+    check on this path: the contract's own caps count characters, which does not bound
+    multibyte content.
+    """
+    validate_input_size(len(json.dumps(payload, default=str, ensure_ascii=False).encode("utf-8")))
+    return payload
 
 
 def _error_result(error: PrismError) -> dict[str, Any]:
@@ -98,7 +111,9 @@ def build_server() -> MCPServer:
         description=(
             "Select 3-5 useful perspectives for a task and return the claim-packet "
             "contract the host should follow. Deterministic and offline. Reads packaged "
-            "registry data only: no user-project files, no network, no credentials."
+            "registry data, or the lens set an operator has explicitly declared and "
+            "contained; the report says which. Never user-project files, the network, "
+            "or credentials."
         ),
         annotations=READ_ONLY,
         structured_output=True,
@@ -109,9 +124,8 @@ def build_server() -> MCPServer:
         max_perspectives: int | None = None,
     ) -> dict[str, Any]:
         def run() -> dict[str, Any]:
-            request = PreflightRequest(
-                task=task, mode=PrismMode(mode), max_perspectives=max_perspectives
-            )
+            payload = {"task": task, "mode": mode, "max_perspectives": max_perspectives}
+            request = parse_payload(PreflightRequest, _checked(payload))
             return service().preflight(request).model_dump(mode="json")
 
         return _guard("preflight", run)
@@ -130,7 +144,8 @@ def build_server() -> MCPServer:
     )
     def prism_measure(request: dict[str, Any]) -> dict[str, Any]:
         def run() -> dict[str, Any]:
-            return service().measure(parse_payload(MeasureRequest, request)).model_dump(mode="json")
+            parsed = parse_payload(MeasureRequest, _checked(request))
+            return service().measure(parsed).model_dump(mode="json")
 
         return _guard("measure", run)
 
@@ -153,8 +168,8 @@ def build_server() -> MCPServer:
             return (
                 service()
                 .synthesis_contract(
-                    parse_payload(PreflightReport, preflight) if preflight else None,
-                    parse_payload(MeasureReport, measurement) if measurement else None,
+                    parse_payload(PreflightReport, _checked(preflight)) if preflight else None,
+                    parse_payload(MeasureReport, _checked(measurement)) if measurement else None,
                 )
                 .model_dump(mode="json")
             )

@@ -53,6 +53,10 @@ MAX_IDENTIFIER_CHARS: Final[int] = 128
 MAX_SOURCE_LABEL_CHARS: Final[int] = 256
 MAX_REGISTRY_PERSPECTIVES: Final[int] = 64
 
+#: A perspective registry is small canonical data. The cap bounds the read a declared
+#: override performs, so an operator-supplied path cannot pull an arbitrary large file in.
+MAX_REGISTRY_BYTES: Final[int] = 256 * 1024
+
 # --------------------------------------------------------------------------------------
 # output projection: aggregates stay exact, inline detail is capped
 # --------------------------------------------------------------------------------------

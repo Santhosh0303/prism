@@ -18,19 +18,32 @@ import hashlib
 import json
 import os
 import re
+import stat
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
 import yaml
 
-from ..constants import CANONICAL_JSON_SEPARATORS, REGISTRY_FILENAME
+from ..constants import (
+    CANONICAL_JSON_SEPARATORS,
+    OVERRIDE_ORIGIN,
+    PACKAGED_ORIGIN,
+    REGISTRY_FILENAME,
+    RegistryOrigin,
+)
 from ..errors import ErrorCode, PrismError
-from ..limits import MAX_CLAIMS_PER_CANDIDATE, MAX_REGISTRY_PERSPECTIVES
+from ..limits import MAX_CLAIMS_PER_CANDIDATE, MAX_REGISTRY_BYTES, MAX_REGISTRY_PERSPECTIVES
 
 #: Override for tests and for operators who vendor their own lens set. The file is still
 #: fully validated; an override cannot relax any rule below.
 REGISTRY_PATH_ENV_VAR: Final[str] = "PRISM_REGISTRY_PATH"
+
+#: The override is opt-in, and the opt-in is the containment root: an operator who
+#: vendors a lens set names the directory it lives in, and nothing outside that directory
+#: can be loaded. A stray ``PRISM_REGISTRY_PATH`` in an inherited environment therefore
+#: cannot redirect preflight on its own — it is refused, loudly, not ignored.
+REGISTRY_ROOT_ENV_VAR: Final[str] = "PRISM_REGISTRY_ROOT"
 
 _ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z][a-z0-9_]*$")
 _SEMVER_PATTERN: Final[re.Pattern[str]] = re.compile(r"^\d+\.\d+\.\d+$")
@@ -42,6 +55,19 @@ VALID_RISK_TAGS: Final[frozenset[str]] = frozenset({"critical", "adversarial", "
 #: include security and red_team together, so an exclusion between any pair of them would
 #: make a mandatory selection unsatisfiable.
 CRITICAL_LENSES: Final[frozenset[str]] = frozenset({"security", "red_team", "performance"})
+
+
+def _refuse_override(reason: str, **diagnostics: str) -> PrismError:
+    """Refuse a declared registry override, naming the control that refused it.
+
+    Diagnostics carry control names, never the operator's paths: a refusal is not a place
+    to disclose filesystem layout.
+    """
+    return PrismError(
+        code=ErrorCode.CONFIG_INTEGRITY_FAILURE,
+        message=reason,
+        diagnostics={"registry_origin": OVERRIDE_ORIGIN, **diagnostics},
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,11 +98,13 @@ class PerspectiveRegistry:
         version: str,
         perspectives: tuple[PerspectiveDefinition, ...],
         content_hash: str,
+        origin: RegistryOrigin = PACKAGED_ORIGIN,
     ) -> None:
         self.version = version
         self._perspectives = perspectives
         self._by_id = {perspective.id: perspective for perspective in perspectives}
         self.content_hash = content_hash
+        self.origin = origin
 
     # -- access ------------------------------------------------------------------------
 
@@ -107,11 +135,88 @@ class PerspectiveRegistry:
     # -- loading -----------------------------------------------------------------------
 
     @classmethod
-    def default_path(cls) -> Path:
-        override = os.environ.get(REGISTRY_PATH_ENV_VAR)
-        if override:
-            return Path(override)
+    def packaged_path(cls) -> Path:
+        """The registry that ships inside the wheel. Always available, never overridden."""
         return Path(__file__).resolve().parent.parent / "perspectives" / REGISTRY_FILENAME
+
+    @classmethod
+    def default_path(cls) -> Path:
+        """The packaged registry, unless a contained override has been declared."""
+        override = os.environ.get(REGISTRY_PATH_ENV_VAR)
+        if not override:
+            return cls.packaged_path()
+        return cls._validated_override(override, os.environ.get(REGISTRY_ROOT_ENV_VAR))
+
+    @classmethod
+    def _validated_override(cls, override: str, root: str | None) -> Path:
+        """Admit an operator-declared registry, or refuse it with a reason.
+
+        Every check here is about the *path*, before a single byte is read: an override
+        that names a file outside the declared root, reaches it through a link, or points
+        at something that is not a regular file is refused rather than parsed.
+        """
+
+        if not root:
+            raise _refuse_override(
+                f"{REGISTRY_PATH_ENV_VAR} is set but {REGISTRY_ROOT_ENV_VAR} is not. A "
+                "registry override must declare the directory it is contained in.",
+                missing_variable=REGISTRY_ROOT_ENV_VAR,
+            )
+        try:
+            canonical_root = Path(root).resolve(strict=True)
+        except OSError:
+            raise _refuse_override(
+                f"{REGISTRY_ROOT_ENV_VAR} does not name an existing directory.",
+                control="root_exists",
+            ) from None
+        if not canonical_root.is_dir():
+            raise _refuse_override(
+                f"{REGISTRY_ROOT_ENV_VAR} does not name a directory.", control="root_is_dir"
+            )
+
+        declared = Path(override)
+        if not declared.is_absolute():
+            declared = Path.cwd() / declared
+        try:
+            canonical = declared.resolve(strict=True)
+        except OSError:
+            raise _refuse_override(
+                "The declared registry override does not exist.", control="override_exists"
+            ) from None
+        if not canonical.is_relative_to(canonical_root):
+            raise _refuse_override(
+                f"The registry override resolves outside {REGISTRY_ROOT_ENV_VAR}.",
+                control="containment",
+            )
+        cls._reject_links(declared, canonical_root)
+        return canonical
+
+    @staticmethod
+    def _reject_links(declared: Path, canonical_root: Path) -> None:
+        """Refuse a link anywhere between the containment root and the file.
+
+        Containment is checked against the *resolved* path, so a link out of the root is
+        already refused. This closes the remaining case: a link inside the root, which
+        would let the file a report attributes to the root be swapped without the root
+        itself changing. The walk stops at the root, so links above it — a home directory
+        that is itself a link, say — are the operator's business and not rejected.
+        """
+        probe = declared
+        while True:
+            if probe.is_symlink() or probe.is_junction():
+                raise _refuse_override(
+                    "The registry override is reached through a link. Pass the real path.",
+                    control="link_rejection",
+                )
+            parent = probe.parent
+            if parent == probe:
+                return
+            probe = parent
+            try:
+                if probe.resolve() == canonical_root:
+                    return
+            except OSError:
+                return
 
     @classmethod
     def load(cls, path: Path | None = None) -> PerspectiveRegistry:
@@ -122,18 +227,59 @@ class PerspectiveRegistry:
                 registry fails closed; there is no partial or repaired load.
         """
         source = path if path is not None else cls.default_path()
+        raw_text = cls._read_source(source)
+        document = cls._parse(raw_text)
+        version = cls._validate_version(document)
+        perspectives = cls._validate_perspectives(document)
+        content_hash = cls._canonical_hash(version, perspectives)
+        return cls(
+            version=version,
+            perspectives=perspectives,
+            content_hash=content_hash,
+            origin=cls._origin_of(source),
+        )
+
+    @classmethod
+    def _origin_of(cls, source: Path) -> RegistryOrigin:
+        try:
+            return PACKAGED_ORIGIN if source.resolve() == cls.packaged_path() else OVERRIDE_ORIGIN
+        except OSError:
+            return OVERRIDE_ORIGIN
+
+    @staticmethod
+    def _read_source(source: Path) -> str:
+        """Read a registry that is a regular file and within the size a registry can be.
+
+        The cap applies to every source, not only to an env-declared one: the size is
+        known from the stat, so an oversized file is refused without being loaded.
+        """
         if not source.is_file():
             raise PrismError(
                 code=ErrorCode.CONFIG_INTEGRITY_FAILURE,
                 message="The packaged perspective registry is missing.",
                 diagnostics={"registry_filename": source.name},
             )
-        raw_text = source.read_text(encoding="utf-8")
-        document = cls._parse(raw_text)
-        version = cls._validate_version(document)
-        perspectives = cls._validate_perspectives(document)
-        content_hash = cls._canonical_hash(version, perspectives)
-        return cls(version=version, perspectives=perspectives, content_hash=content_hash)
+        info = source.stat()
+        if not stat.S_ISREG(info.st_mode):
+            raise PrismError(
+                code=ErrorCode.CONFIG_INTEGRITY_FAILURE,
+                message="The perspective registry is not a regular file.",
+                diagnostics={"control": "regular_file"},
+            )
+        if info.st_size > MAX_REGISTRY_BYTES:
+            raise PrismError(
+                code=ErrorCode.CONFIG_INTEGRITY_FAILURE,
+                message="The perspective registry exceeds the maximum accepted size.",
+                diagnostics={"registry_bytes": info.st_size, "limit_bytes": MAX_REGISTRY_BYTES},
+            )
+        try:
+            return source.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            raise PrismError(
+                code=ErrorCode.CONFIG_INTEGRITY_FAILURE,
+                message="The perspective registry is not valid UTF-8.",
+                diagnostics={"control": "utf8"},
+            ) from None
 
     # -- validation --------------------------------------------------------------------
 
