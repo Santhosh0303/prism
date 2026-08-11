@@ -134,7 +134,10 @@ disagreement, judge it yourself".
 ## Writing the final answer
 
 - Answer the original task. The measurement is not the deliverable.
-- Disclose every unresolved contradiction, naming the claims involved.
+- Disclose every contradiction the contract names, naming the claims involved, and state
+  the omitted counts it reports alongside them. Inline detail is capped, so a report can
+  say "3 further contradicting pairs were omitted" — pass that count on rather than
+  implying the listed ones were all of them.
 - Preserve retained distinct claims, especially named failure modes.
 - Separate fact, assumption, and recommendation, and label which is which.
 - Never present majority agreement as proof.
