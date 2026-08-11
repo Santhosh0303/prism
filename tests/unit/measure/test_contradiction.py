@@ -167,6 +167,7 @@ def report_from(
     status: PrismStatus = PrismStatus.OK,
     source_diversity: SourceDiversity = SourceDiversity.SINGLE_SOURCE,
     agreement: AgreementType = AgreementType.UNCLEAR,
+    diagnostics: dict[str, str | int | float | bool | None] | None = None,
 ) -> MeasureReport:
     return build_measure_report(
         ledger=ledger,
@@ -181,7 +182,7 @@ def report_from(
         duplicates=(),
         confidence_spread=None,
         include_raw_nli_scores=False,
-        diagnostics={},
+        diagnostics=diagnostics if diagnostics is not None else {},
     )
 
 
@@ -243,3 +244,109 @@ def test_report_can_be_reconstructed_from_the_raw_ledger() -> None:
     assert report.contradiction_denominator == recomputed_denominator
     assert report.experimental_contradiction_count == recomputed_count
     assert report.pair_ledger_digest == ledger.digest
+
+
+# --------------------------------------------------------------------------------------
+# the digest covers the whole ledger, not the part that survived
+# --------------------------------------------------------------------------------------
+
+
+def test_pairs_total_is_inside_the_digest() -> None:
+    """Two ledgers with identical entries but different pair counts are different ledgers.
+
+    Under the old envelope they hashed identically, so pairs vanishing before the
+    relevance floor left the digest untouched.
+    """
+    shared = entries(10, 4, 10)
+    assert (
+        PairLedger(entries=shared, pairs_total=10, threshold=0.5).digest
+        != PairLedger(entries=shared, pairs_total=40, threshold=0.5).digest
+    )
+
+
+def test_an_irrelevant_pair_changes_the_digest() -> None:
+    """A pair dropped at the relevance floor is still evidence about what was compared."""
+    shared = entries(4, 2, 4)
+    base = PairLedger(entries=shared, pairs_total=6, threshold=0.5)
+    with_dropped = PairLedger(
+        entries=shared,
+        pairs_total=6,
+        threshold=0.5,
+        irrelevant_pairs=(("p900", 0.11), ("p901", 0.07)),
+    )
+    renamed = PairLedger(
+        entries=shared,
+        pairs_total=6,
+        threshold=0.5,
+        irrelevant_pairs=(("p900", 0.11), ("p902", 0.07)),
+    )
+
+    assert base.digest != with_dropped.digest
+    assert with_dropped.digest != renamed.digest
+
+
+def test_the_scope_verdict_is_inside_the_digest() -> None:
+    """Scope decides the denominator, so it cannot sit outside the hash of the ledger."""
+    same_scope = PairLedger(entries=entries(6, 3, 6), pairs_total=6, threshold=0.5)
+    some_divergent = PairLedger(entries=entries(6, 3, 4), pairs_total=6, threshold=0.5)
+    assert same_scope.digest != some_divergent.digest
+
+
+def test_the_digest_is_stable_for_an_unchanged_ledger() -> None:
+    """Order of construction must not leak into the hash."""
+    forward = PairLedger(
+        entries=entries(5, 2, 5),
+        pairs_total=7,
+        threshold=0.5,
+        irrelevant_pairs=(("p800", 0.2), ("p801", 0.3)),
+    )
+    reversed_inputs = PairLedger(
+        entries=tuple(reversed(entries(5, 2, 5))),
+        pairs_total=7,
+        threshold=0.5,
+        irrelevant_pairs=(("p801", 0.3), ("p800", 0.2)),
+    )
+    assert forward.digest == reversed_inputs.digest
+
+
+# --------------------------------------------------------------------------------------
+# the report states the size of the document it actually is
+# --------------------------------------------------------------------------------------
+
+
+def _padded_report(padding: int) -> MeasureReport:
+    """A report whose size can be tuned one byte at a time."""
+    return report_from(
+        PairLedger(entries=entries(4, 2, 4), pairs_total=4, threshold=0.5),
+        diagnostics={"pad": "x" * padding},
+    )
+
+
+def test_report_bytes_equals_the_emitted_length_at_the_budget_edge() -> None:
+    """Land the report within one byte of the cap, where a one-byte lie decides the gate.
+
+    The old code measured the document with ``report_bytes`` unset and then attached the
+    integer, so the emitted document was longer than the one that had been checked. It
+    went unnoticed because ``null`` is four characters wide, exactly like a four-digit
+    size, and every report in the suite happened to land there.
+    """
+    padding = 0
+    report = _padded_report(padding)
+    for _ in range(8):
+        assert report.report_bytes is not None
+        shortfall = MAX_DEFAULT_REPORT_BYTES - report.report_bytes
+        if shortfall == 0:
+            break
+        padding += shortfall
+        report = _padded_report(padding)
+
+    assert report.report_bytes == MAX_DEFAULT_REPORT_BYTES
+    assert len(canonical_json(report).encode("utf-8")) == report.report_bytes
+    assert report.report_bytes <= MAX_DEFAULT_REPORT_BYTES
+
+
+@pytest.mark.parametrize("padding", [0, 500, 9000, 10500])
+def test_report_bytes_is_exact_at_every_integer_width(padding: int) -> None:
+    """Three-, four- and five-digit sizes must all describe the emitted bytes."""
+    report = _padded_report(padding)
+    assert len(canonical_json(report).encode("utf-8")) == report.report_bytes

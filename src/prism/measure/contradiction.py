@@ -24,7 +24,7 @@ contradicts B" can score far lower than "B contradicts A" for the same disagreem
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import combinations
 from typing import Final, Protocol
 
@@ -44,6 +44,11 @@ class Encoders(Protocol):
     def embed(self, texts: list[str]) -> object: ...
 
     def contradiction_probabilities(self, pairs: list[tuple[str, str]]) -> object: ...
+
+
+#: Identifies the shape hashed by :attr:`PairLedger.digest`. Bump it whenever a field
+#: enters or leaves the envelope, so two digests are only ever compared under one shape.
+LEDGER_DIGEST_SCHEMA: Final[str] = "prism.pair-ledger.1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,7 +87,11 @@ class PairLedger:
     entries: tuple[LedgerEntry, ...]
     pairs_total: int
     threshold: float
-    internal_entries: tuple[LedgerEntry, ...] = field(default=())
+    #: Pairs dropped at the relevance floor, as ``(pair_id, relevance)``. They carry no
+    #: scope verdict and no NLI score because neither was ever computed for them, but
+    #: which pairs were dropped is part of what the ledger records: a relevance threshold
+    #: that silently removed the interesting comparison must be visible in the digest.
+    irrelevant_pairs: tuple[tuple[str, float], ...] = ()
 
     # -- aggregates --------------------------------------------------------------------
 
@@ -137,19 +146,42 @@ class PairLedger:
 
     @property
     def digest(self) -> str:
-        """Digest over the complete ledger, so a bounded report stays inspectable."""
+        """Digest over the complete ledger, so a bounded report stays inspectable.
+
+        The envelope covers every pair PRISM enumerated — relevant and irrelevant alike —
+        with the status each was given, plus the parameters it was judged under. Hashing
+        only the relevant entries would leave the two changes most likely to alter a
+        finding invisible: a pair falling below the relevance floor, and the pair count
+        itself. The schema string is inside the hash so a digest produced under a
+        different envelope shape cannot be compared with one produced under this.
+        """
+        pairs: list[dict[str, object]] = [
+            {
+                "pair_id": e.pair_id,
+                "status": "RELEVANT",
+                "relevance": e.relevance,
+                "scope": e.scope.value,
+                "scope_dimension": e.scope_dimension,
+                "scope_marker_a": e.scope_marker_a,
+                "scope_marker_b": e.scope_marker_b,
+                "in_denominator": e.in_denominator,
+                "score_a_to_b": e.score_a_to_b,
+                "score_b_to_a": e.score_b_to_a,
+            }
+            for e in self.entries
+        ]
+        pairs.extend(
+            {"pair_id": pair_id, "status": "IRRELEVANT", "relevance": relevance}
+            for pair_id, relevance in self.irrelevant_pairs
+        )
+        pairs.sort(key=lambda record: str(record["pair_id"]))
         return canonical_digest(
-            [
-                {
-                    "pair_id": e.pair_id,
-                    "relevance": e.relevance,
-                    "scope": e.scope.value,
-                    "in_denominator": e.in_denominator,
-                    "score_a_to_b": e.score_a_to_b,
-                    "score_b_to_a": e.score_b_to_a,
-                }
-                for e in sorted(self.entries, key=lambda entry: entry.pair_id)
-            ]
+            {
+                "schema": LEDGER_DIGEST_SCHEMA,
+                "threshold": self.threshold,
+                "pairs_total": self.pairs_total,
+                "pairs": pairs,
+            }
         )
 
 
@@ -208,6 +240,11 @@ def build_ledger(pair_set: PairSet, encoders: Encoders) -> PairLedger:
     )
     scored_pairs = apply_relevance(cross, relevance_scores)
     relevant = tuple(pair for pair in scored_pairs if pair.is_relevant)
+    irrelevant = tuple(
+        (pair.pair_id, float(pair.relevance if pair.relevance is not None else 0.0))
+        for pair in scored_pairs
+        if not pair.is_relevant
+    )
 
     # -- scope, then E2 over the denominator ------------------------------------------
     denominator_pairs = [
@@ -238,7 +275,7 @@ def build_ledger(pair_set: PairSet, encoders: Encoders) -> PairLedger:
         entries=entries,
         pairs_total=len(cross),
         threshold=threshold,
-        internal_entries=(),
+        irrelevant_pairs=irrelevant,
     )
 
 
