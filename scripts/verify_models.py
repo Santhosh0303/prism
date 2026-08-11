@@ -8,10 +8,16 @@ Two modes, one source of truth:
 * default (verify) re-reads the manifest and re-verifies every artifact, which is what CI
   and ``prism health --deep`` rely on.
 
+The committed manifest is the trust anchor, so ``--generate`` will not overwrite an
+existing one without ``--overwrite-manifest``. Without that guard, trust metadata could be
+minted from whatever bytes happened to be on disk — which is exactly how a swapped
+artifact starts verifying cleanly. ``scripts/acquire_models.py`` is what ties the anchor to
+upstream; this script never fetches anything.
+
 Run from the repository root:
 
-    uv run python scripts/verify_models.py --generate
     uv run python scripts/verify_models.py
+    uv run python scripts/verify_models.py --generate --overwrite-manifest
 """
 
 from __future__ import annotations
@@ -77,7 +83,18 @@ def label_map(config_path: Path) -> tuple[dict[str, str] | None, int | None]:
     return normalised, index
 
 
-def generate() -> ModelManifest:
+def generate(*, allow_overwrite: bool) -> ModelManifest:
+    if MANIFEST_PATH.exists() and not allow_overwrite:
+        raise SystemExit(
+            f"refusing to overwrite the committed trust anchor: {MANIFEST_PATH}\n"
+            "  --generate rewrites every hash from the bytes now on disk, which would make "
+            "a swapped artifact verify cleanly.\n"
+            "  To obtain the pinned artifacts instead, run: "
+            "python scripts/acquire_models.py\n"
+            "  To adopt a new pinned revision deliberately, rerun with "
+            "--generate --overwrite-manifest and review the manifest diff."
+        )
+
     models = []
     for role, pinned in PINNED.items():
         directory = ARTIFACT_ROOT / str(pinned["directory"])
@@ -118,13 +135,22 @@ def generate() -> ModelManifest:
     return manifest
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--generate", action="store_true", help="measure artifacts and write")
-    args = parser.parse_args()
+    parser.add_argument(
+        "--overwrite-manifest",
+        action="store_true",
+        help="allow --generate to replace an existing manifest. Required to adopt a new "
+        "pinned revision; never use it to make a failing verification pass.",
+    )
+    args = parser.parse_args(argv)
+
+    if args.overwrite_manifest and not args.generate:
+        parser.error("--overwrite-manifest has no effect without --generate")
 
     if args.generate:
-        manifest = generate()
+        manifest = generate(allow_overwrite=args.overwrite_manifest)
         print(f"wrote {MANIFEST_PATH}")
     else:
         manifest = ModelManifest.model_validate_json(MANIFEST_PATH.read_text(encoding="utf-8"))
