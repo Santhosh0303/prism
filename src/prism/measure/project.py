@@ -18,6 +18,8 @@ typed ``OUTPUT_BUDGET_EXCEEDED``.
 
 from __future__ import annotations
 
+from typing import Final
+
 from ..canonical import canonical_json, canonical_rate
 from ..contracts import (
     AgreementType,
@@ -187,32 +189,64 @@ def build_measure_report(
     return _enforce_byte_budget(report)
 
 
-def _enforce_byte_budget(report: MeasureReport) -> MeasureReport:
-    """Attach the measured size, and fail loudly rather than truncate silently."""
-    encoded = canonical_json(report)
-    size = len(encoded.encode("utf-8"))
-    sized = report.model_copy(update={"report_bytes": size})
+#: Writing the size into the document changes the document, so the value is a fixed point
+#: rather than a measurement. Each pass can only widen the integer, so it settles almost
+#: immediately; the cap exists to turn a hypothetical oscillation into a loud failure
+#: instead of a hang.
+_SIZE_PASSES: Final[int] = 4
 
-    if size <= MAX_DEFAULT_REPORT_BYTES:
+
+def _with_measured_size(report: MeasureReport) -> MeasureReport:
+    """Set ``report_bytes`` to the length of the document that carries it.
+
+    The previous implementation measured the report with the field still unset and then
+    attached the number, so the emitted document was longer than the one that had been
+    measured. That is invisible while the integer happens to be as wide as ``null`` and
+    wrong as soon as it is not.
+    """
+    sized = report
+    for _ in range(_SIZE_PASSES):
+        size = len(canonical_json(sized).encode("utf-8"))
+        if sized.report_bytes == size:
+            return sized
+        sized = report.model_copy(update={"report_bytes": size})
+    raise PrismError(
+        code=ErrorCode.INTERNAL_ERROR,
+        message="The reported size did not converge on the size of the emitted document.",
+        diagnostics={"passes": _SIZE_PASSES, "last_size": sized.report_bytes},
+    )
+
+
+def _enforce_byte_budget(report: MeasureReport) -> MeasureReport:
+    """Attach the measured size, and fail loudly rather than truncate silently.
+
+    The budget is checked against the size of the document the caller actually receives,
+    not against a draft of it.
+    """
+    sized = _with_measured_size(report)
+    if sized.report_bytes is not None and sized.report_bytes <= MAX_DEFAULT_REPORT_BYTES:
         return sized
 
     # Second pass: drop the diagnostic raw scores, which are the largest optional payload.
-    reduced = report.model_copy(
-        update={
-            "raw_nli_scores": (),
-            "raw_nli_scores_omitted_count": (
-                report.raw_nli_scores_omitted_count + len(report.raw_nli_scores)
-            ),
-        }
+    reduced = _with_measured_size(
+        report.model_copy(
+            update={
+                "raw_nli_scores": (),
+                "raw_nli_scores_omitted_count": (
+                    report.raw_nli_scores_omitted_count + len(report.raw_nli_scores)
+                ),
+            }
+        )
     )
-    encoded = canonical_json(reduced)
-    size = len(encoded.encode("utf-8"))
-    if size <= MAX_DEFAULT_REPORT_BYTES:
-        return reduced.model_copy(update={"report_bytes": size})
+    if reduced.report_bytes is not None and reduced.report_bytes <= MAX_DEFAULT_REPORT_BYTES:
+        return reduced
 
     raise PrismError(
         code=ErrorCode.OUTPUT_BUDGET_EXCEEDED,
         message="The report could not be reduced below the size budget without silently "
         "truncating it.",
-        diagnostics={"report_bytes": size, "limit_bytes": MAX_DEFAULT_REPORT_BYTES},
+        diagnostics={
+            "report_bytes": reduced.report_bytes,
+            "limit_bytes": MAX_DEFAULT_REPORT_BYTES,
+        },
     )
