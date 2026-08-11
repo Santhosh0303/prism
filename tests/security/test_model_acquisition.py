@@ -135,6 +135,40 @@ def test_a_repository_the_model_card_does_not_name_is_refused() -> None:
     assert raised.value.diagnostics["repository"] == manifest.models[1].name
 
 
+def test_recombining_two_documented_models_is_refused() -> None:
+    """Both repositories and both revisions stay in the card; only the pairing changes.
+
+    Checking membership of the repository and of the revision independently would pass
+    this — which is the whole reason the card declares them as one record.
+    """
+    raw = json.loads(MANIFEST_TEXT)
+    first, second = raw["models"][0], raw["models"][1]
+    first["upstream_revision"], second["upstream_revision"] = (
+        second["upstream_revision"],
+        first["upstream_revision"],
+    )
+    swapped = ModelManifest.model_validate(_tuple_shaped(raw))
+
+    for model in swapped.models:
+        assert model.name in MODEL_CARD_TEXT
+        assert model.upstream_revision in MODEL_CARD_TEXT
+
+    with pytest.raises(PrismError) as raised:
+        acquire_models.assert_documented(swapped, MODEL_CARD_TEXT)
+
+    assert raised.value.code is ErrorCode.MODEL_INTEGRITY_FAILURE
+    assert raised.value.diagnostics["repository"] == swapped.models[0].name
+    assert raised.value.diagnostics["revision"] == swapped.models[0].upstream_revision
+
+
+def test_the_card_declares_exactly_the_pinned_pairs() -> None:
+    manifest = committed_manifest()
+
+    assert acquire_models.documented_pairs(MODEL_CARD_TEXT) == frozenset(
+        (model.name, model.upstream_revision) for model in manifest.models
+    )
+
+
 # --------------------------------------------------------------------------------------
 # the plan is derived from the anchor, not from a caller
 # --------------------------------------------------------------------------------------
@@ -231,6 +265,44 @@ def test_a_matching_download_is_moved_into_place(tmp_path: Path) -> None:
     assert seen == [fetch.url]
     assert not list(tmp_path.rglob("*.part"))
     assert acquire_models.already_present(fetch)
+
+
+def test_the_predictable_part_name_is_never_written_through(tmp_path: Path) -> None:
+    """A fixed `<artifact>.part` is a name an attacker who can write the destination
+    directory first can occupy. The scratch file is created exclusively under an
+    unguessable name instead, so anything already sitting at the obvious one is untouched."""
+    body = b'{"hidden_size": 384}'
+    fetch = one_fetch(tmp_path, body)
+    fetch.destination.parent.mkdir(parents=True)
+    decoy = fetch.destination.with_name(fetch.destination.name + ".part")
+    decoy.write_bytes(b"not mine to overwrite")
+    opener, _ = opener_for(body)
+
+    acquire_models.download(fetch, opener)  # type: ignore[arg-type]
+
+    assert fetch.destination.read_bytes() == body
+    assert decoy.read_bytes() == b"not mine to overwrite"
+
+
+def test_a_pre_created_part_symlink_is_not_followed(tmp_path: Path) -> None:
+    """The threat the exclusive creation exists for: opening a fixed name for writing
+    follows a symlink and overwrites its target outside the model root."""
+    body = b'{"hidden_size": 384}'
+    fetch = one_fetch(tmp_path, body)
+    fetch.destination.parent.mkdir(parents=True)
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(b"untouched")
+    link = fetch.destination.with_name(fetch.destination.name + ".part")
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError) as exc:  # unprivileged Windows, mainly
+        pytest.skip(f"this platform will not create a symlink here: {type(exc).__name__}")
+    opener, _ = opener_for(body)
+
+    acquire_models.download(fetch, opener)  # type: ignore[arg-type]
+
+    assert outside.read_bytes() == b"untouched"
+    assert fetch.destination.read_bytes() == body
 
 
 def test_a_download_that_does_not_match_the_manifest_is_discarded(tmp_path: Path) -> None:
