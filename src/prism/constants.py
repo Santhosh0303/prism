@@ -9,7 +9,7 @@ this module so that it cannot be reached through configuration.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Final
+from typing import Final, Literal
 
 # --------------------------------------------------------------------------------------
 # Identity
@@ -37,6 +37,14 @@ _PACKAGE_ROOT: Final[Path] = Path(__file__).resolve().parent
 #: The perspective registry is packaged read-only data, never user-project content.
 REGISTRY_FILENAME: Final[str] = "registry.yaml"
 REGISTRY_SCHEMA_FILENAME: Final[str] = "registry.schema.json"
+
+#: Where the perspectives in a report came from. A closed vocabulary, not a path: the
+#: distinction between packaged data and an operator's vendored lens set is contract
+#: surface, while the operator's filesystem layout is not. Defined here so the loader and
+#: the public contracts cannot drift to two different spellings of it.
+RegistryOrigin = Literal["packaged", "override"]
+PACKAGED_ORIGIN: Final[RegistryOrigin] = "packaged"
+OVERRIDE_ORIGIN: Final[RegistryOrigin] = "override"
 
 #: Dedicated read-only model root. Production deployment points this at a directory the
 #: host sandbox mounts read-only. This is an application-level boundary, not an OS

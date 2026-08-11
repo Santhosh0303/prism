@@ -34,7 +34,12 @@ from pydantic import (
     model_validator,
 )
 
-from .constants import CALIBRATION_HUMAN_VALIDATED, CALIBRATION_UNCALIBRATED
+from .constants import (
+    CALIBRATION_HUMAN_VALIDATED,
+    CALIBRATION_UNCALIBRATED,
+    PACKAGED_ORIGIN,
+    RegistryOrigin,
+)
 from .limits import (
     DEFAULT_TIMEOUT_SECONDS,
     MAX_CANDIDATES,
@@ -276,6 +281,10 @@ class PreflightReport(_Strict):
     mode: PrismMode
     registry_version: str
     registry_hash: Digest
+    #: Packaged data, or an operator-declared lens set. A consumer should be able to see
+    #: that the perspectives did not come from the wheel without inspecting the host's
+    #: environment.
+    registry_origin: RegistryOrigin = PACKAGED_ORIGIN
     perspectives: tuple[PerspectiveInstruction, ...] = Field(min_length=3, max_length=5)
     execution_contract: ExecutionContract
     diagnostics: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
@@ -658,6 +667,7 @@ class HealthReport(_Strict):
     package_version: str
     registry_version: str
     registry_hash: Digest | None = None
+    registry_origin: RegistryOrigin = PACKAGED_ORIGIN
     model_manifest_hash: Digest | None = None
     measurement_available: bool
     measurement_disabled_by_kill_switch: bool = False

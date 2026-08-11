@@ -40,6 +40,7 @@ from .contracts import (
     parse_payload,
 )
 from .errors import ErrorCode, PrismError
+from .limits import MAX_INPUT_BYTES, validate_input_size
 from .service import PrismService
 from .telemetry import new_request_id
 from .version import PACKAGE_VERSION, version_info
@@ -67,10 +68,40 @@ _EXIT_FOR_CODE = {
 }
 
 
+def _decode(raw: bytes) -> str:
+    """Decode accepted input. A decoding failure is bad input, not an internal fault."""
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        raise PrismError(
+            code=ErrorCode.INVALID_INPUT,
+            message="Input is not valid UTF-8.",
+            diagnostics={"input_kind": "undecodable"},
+        ) from None
+
+
+def _read_stdin() -> str:
+    """Read one byte past the limit and no further.
+
+    The stream is unbounded by nature, so the bound has to be applied to the read itself:
+    draining it first and measuring afterwards is the denial-of-service path the byte gate
+    exists to close.
+    """
+    buffer = getattr(sys.stdin, "buffer", None)
+    if buffer is None:
+        # A text stream, which is what a test or an embedding host may substitute. The
+        # same window in characters is at least as many bytes, so the read stays bounded.
+        raw = sys.stdin.read(MAX_INPUT_BYTES + 1).encode("utf-8")
+    else:
+        raw = buffer.read(MAX_INPUT_BYTES + 1)
+    validate_input_size(len(raw))
+    return _decode(raw)
+
+
 def _read_input(source: str) -> str:
     """Read from stdin or a regular file. Nothing else is acceptable."""
     if source == "-":
-        return sys.stdin.read()
+        return _read_stdin()
 
     path = Path(source)
     if path.is_symlink():
@@ -85,15 +116,18 @@ def _read_input(source: str) -> str:
             message="The input file does not exist.",
             diagnostics={"input_kind": "missing"},
         )
-    mode = path.stat().st_mode
-    if not stat.S_ISREG(mode):
+    info = path.stat()
+    if not stat.S_ISREG(info.st_mode):
         # A FIFO or device could block forever or stream without bound.
         raise PrismError(
             code=ErrorCode.INVALID_INPUT,
             message="Input is not a regular file. Devices, FIFOs, and sockets are refused.",
             diagnostics={"input_kind": "irregular"},
         )
-    return path.read_text(encoding="utf-8")
+    # Size is known before the read for a regular file, so an oversized one is refused
+    # without ever being loaded.
+    validate_input_size(info.st_size)
+    return _decode(path.read_bytes())
 
 
 def _render(payload: Any, output_format: str) -> str:
@@ -108,7 +142,10 @@ def _markdown(report: Any) -> str:
     if isinstance(report, PreflightReport):
         lines.append(f"# PRISM preflight: {report.task_profile} ({report.mode.value})")
         lines.append(f"classification confidence: {report.classification_confidence.value}")
-        lines.append(f"registry {report.registry_version} {report.registry_hash[:19]}...")
+        lines.append(
+            f"registry {report.registry_version} {report.registry_hash[:19]}... "
+            f"({report.registry_origin})"
+        )
         lines.append("")
         for instruction in report.perspectives:
             lines.append(f"## {instruction.id}  (up to {instruction.claim_budget} claims)")
@@ -254,11 +291,20 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.command == "preflight":
             task = args.task if args.task is not None else _read_input(args.task_file)
+            # --task arrives on the command line, so it never passed through the read
+            # gate. The contract's cap is in characters, which does not bound multibyte
+            # input; this is the byte bound.
+            validate_input_size(len(task.encode("utf-8")))
             report = service.preflight(
-                PreflightRequest(
-                    task=task,
-                    mode=PrismMode(args.mode),
-                    max_perspectives=args.max_perspectives,
+                # Through parse_payload like every other external input: a contract
+                # violation here is INVALID_INPUT, not an unexpected internal fault.
+                parse_payload(
+                    PreflightRequest,
+                    {
+                        "task": task,
+                        "mode": args.mode,
+                        "max_perspectives": args.max_perspectives,
+                    },
                 )
             )
             _emit(_render(report, output_format))

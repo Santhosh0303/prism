@@ -32,6 +32,7 @@ def test_limit_values_are_the_pinned_ones() -> None:
     assert limits.MAX_IDENTIFIER_CHARS == 128
     assert limits.MAX_SOURCE_LABEL_CHARS == 256
     assert limits.MAX_REGISTRY_PERSPECTIVES == 64
+    assert limits.MAX_REGISTRY_BYTES == 256 * 1024
     assert limits.MAX_INLINE_PAIR_DETAILS == 20
     assert limits.MAX_DEFAULT_REPORT_BYTES == 12 * 1024
     assert limits.DEFAULT_TIMEOUT_SECONDS == 10.0
