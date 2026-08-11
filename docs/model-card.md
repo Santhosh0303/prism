@@ -19,10 +19,12 @@ response.
 | Tokenizer | WordPiece (`vocab.txt`) | BPE (`vocab.json` + `merges.txt`) |
 | Max sequence | 256 tokens (PRISM cap) | 256 tokens (PRISM cap) |
 
-Pinned revisions, resolved once and never followed:
+Pinned revisions, resolved once and never followed. Repository and revision are **one
+record**, not two facts that happen to appear on this page: `scripts/acquire_models.py`
+requires this exact pairing and refuses a manifest that recombines them.
 
-- E1 — `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`
-- E2 — `b95119ce93d3e065de6214e38cd4a97b0f2f2c6d`
+- E1 — `sentence-transformers/all-MiniLM-L6-v2` @ `1110a243fdf4706b3f48f1d95db1a4f5529b4d41`
+- E2 — `cross-encoder/nli-MiniLM2-L6-H768` @ `b95119ce93d3e065de6214e38cd4a97b0f2f2c6d`
 
 Total bundle: 13 files, 422,366,141 bytes. Manifest digest is emitted in every measured
 report so the artifacts behind a result are always identifiable.

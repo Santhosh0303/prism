@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import re
 import sys
+import tempfile
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -65,8 +67,11 @@ _PERMITTED_PREFIX: Final[str] = "https://huggingface.co/"
 #: Everything else can point somewhere new tomorrow.
 IMMUTABLE_REVISION: Final[re.Pattern[str]] = re.compile(r"^[0-9a-f]{40}$")
 
-#: Any 40-hex token in the model card counts as a documented revision.
-DOCUMENTED_REVISION: Final[re.Pattern[str]] = re.compile(r"\b[0-9a-f]{40}\b")
+#: One provenance record in the model card: `repository` @ `revision`, as one line. The
+#: pairing is the point — see `documented_pairs`.
+DOCUMENTED_PROVENANCE: Final[re.Pattern[str]] = re.compile(
+    r"`([A-Za-z0-9][\w.-]*/[\w.-]+)`\s*@\s*`([0-9a-f]{40})`"
+)
 
 _BLOCK: Final[int] = 1024 * 1024
 _USER_AGENT: Final[str] = "prism-acquire-models"
@@ -107,32 +112,36 @@ def require_immutable_revision(revision: str, *, repo: str) -> str:
     return revision
 
 
-def documented_revisions(card_text: str) -> frozenset[str]:
-    return frozenset(DOCUMENTED_REVISION.findall(card_text))
+def documented_pairs(card_text: str) -> frozenset[tuple[str, str]]:
+    """Every `repository @ revision` record the model card declares.
+
+    The pair is the unit. A repository and a revision that each appear somewhere in the
+    card prove nothing about each other: with two documented models, a manifest could
+    recombine them and still satisfy two independent membership checks.
+    """
+    return frozenset(DOCUMENTED_PROVENANCE.findall(card_text))
 
 
 def assert_documented(manifest: ModelManifest, card_text: str) -> None:
-    """Refuse to fetch a revision or repository the model card does not name.
+    """Refuse to fetch a repository/revision pair the model card does not declare.
 
     The manifest is the anchor and the card is the human-readable record of it. If they
     disagree, the documented provenance is wrong, and fetching against the manifest alone
     would quietly make the disagreement permanent.
     """
-    named = documented_revisions(card_text)
+    declared = documented_pairs(card_text)
     for model in manifest.models:
-        if model.upstream_revision not in named:
+        if (model.name, model.upstream_revision) not in declared:
             raise PrismError(
                 code=ErrorCode.MODEL_INTEGRITY_FAILURE,
-                message="The manifest pins a revision that docs/model-card.md does not "
-                "name. Reconcile the two before fetching anything.",
-                diagnostics={"role": model.role, "revision": model.upstream_revision},
-            )
-        if model.name not in card_text:
-            raise PrismError(
-                code=ErrorCode.MODEL_INTEGRITY_FAILURE,
-                message="The manifest pins a repository that docs/model-card.md does not "
-                "name. Reconcile the two before fetching anything.",
-                diagnostics={"role": model.role, "repository": model.name},
+                message="The manifest pins a repository and revision that "
+                "docs/model-card.md does not declare as one record. Reconcile the two "
+                "before fetching anything.",
+                diagnostics={
+                    "role": model.role,
+                    "repository": model.name,
+                    "revision": model.upstream_revision,
+                },
             )
 
 
@@ -208,9 +217,14 @@ def already_present(fetch: Fetch) -> bool:
 def download(fetch: Fetch, opener: Opener) -> None:
     """Fetch one file, and move it into place only if it is byte-for-byte the pinned one.
 
-    The response is read into a `.part` file with a hard ceiling of the manifest size plus
+    The response is read into a scratch file with a hard ceiling of the manifest size plus
     one byte, so a hostile or wrong response cannot fill the disk before the hash is even
     checked.
+
+    That scratch file is created exclusively, with a name nobody can predict. A fixed
+    name — `<artifact>.part` — is a name an attacker who can write the destination
+    directory first can pre-create as a symlink, and opening it for writing would then
+    follow the link and overwrite a file outside the model root.
     """
     url = fetch.url
     if not url.startswith(_PERMITTED_PREFIX):
@@ -221,8 +235,7 @@ def download(fetch: Fetch, opener: Opener) -> None:
         )
     # scheme and host are fixed by the check above; nothing here is caller-supplied.
     request = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})  # noqa: S310
-    part = fetch.destination.with_name(fetch.destination.name + ".part")
-    part.parent.mkdir(parents=True, exist_ok=True)
+    fetch.destination.parent.mkdir(parents=True, exist_ok=True)
 
     digest = hashlib.sha256()
     written = 0
@@ -243,37 +256,43 @@ def download(fetch: Fetch, opener: Opener) -> None:
                 message="Upstream did not serve the artifact.",
                 diagnostics={"path": fetch.manifest_path, "status": int(status)},
             )
-        with part.open("wb") as handle:
-            while written <= fetch.size:
-                block = response.read(min(_BLOCK, fetch.size + 1 - written))
-                if not block:
-                    break
-                written += len(block)
-                digest.update(block)
-                handle.write(block)
+
+        # O_CREAT | O_EXCL under the hood: this fails rather than reusing an existing
+        # name, and the name itself is not guessable.
+        descriptor, scratch_name = tempfile.mkstemp(
+            dir=fetch.destination.parent, prefix=".acquire-", suffix=".part"
+        )
+        scratch = Path(scratch_name)
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                while written <= fetch.size:
+                    block = response.read(min(_BLOCK, fetch.size + 1 - written))
+                    if not block:
+                        break
+                    written += len(block)
+                    digest.update(block)
+                    handle.write(block)
+
+            if written != fetch.size or digest.hexdigest() != fetch.sha256:
+                raise PrismError(
+                    code=ErrorCode.MODEL_INTEGRITY_FAILURE,
+                    message="A downloaded artifact does not match the committed manifest. "
+                    "It was discarded; nothing was written into the model root.",
+                    diagnostics={
+                        "path": fetch.manifest_path,
+                        "expected_bytes": fetch.size,
+                        "actual_bytes": written,
+                        "hash_matches": digest.hexdigest() == fetch.sha256,
+                    },
+                )
+            scratch.replace(fetch.destination)
+        finally:
+            # A no-op once the replace has happened; the discard path on every other exit.
+            scratch.unlink(missing_ok=True)
     finally:
         close = getattr(response, "close", None)
         if close is not None:
             close()
-
-    try:
-        if written != fetch.size or digest.hexdigest() != fetch.sha256:
-            raise PrismError(
-                code=ErrorCode.MODEL_INTEGRITY_FAILURE,
-                message="A downloaded artifact does not match the committed manifest. It "
-                "was discarded; nothing was written into the model root.",
-                diagnostics={
-                    "path": fetch.manifest_path,
-                    "expected_bytes": fetch.size,
-                    "actual_bytes": written,
-                    "hash_matches": digest.hexdigest() == fetch.sha256,
-                },
-            )
-    except PrismError:
-        part.unlink(missing_ok=True)
-        raise
-
-    part.replace(fetch.destination)
 
 
 def acquire(
