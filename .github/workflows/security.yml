@@ -14,6 +14,11 @@ on:
       - "uv.lock"
       - "pyproject.toml"
       - ".github/workflows/security.yml"
+      # The scripts this workflow executes. Without them, an edit to
+      # scripts/verify_offline.py, scripts/build_sbom.py or scripts/check_links.py does
+      # not run the job that executes it — which is how a change to the offline gate
+      # reached a green pull request without that gate ever running on it.
+      - "scripts/**"
 
 permissions:
   contents: read
