@@ -21,6 +21,7 @@ from prism.contracts import (
     ScopeResult,
     SourceDiversity,
 )
+from prism.errors import ErrorCode, PrismError
 from prism.limits import MAX_DEFAULT_REPORT_BYTES, MAX_INLINE_PAIR_DETAILS
 from prism.measure.contradiction import LedgerEntry, PairLedger, build_ledger
 from prism.measure.pair import enumerate_pairs
@@ -168,6 +169,7 @@ def report_from(
     source_diversity: SourceDiversity = SourceDiversity.SINGLE_SOURCE,
     agreement: AgreementType = AgreementType.UNCLEAR,
     diagnostics: dict[str, str | int | float | bool | None] | None = None,
+    include_raw_nli_scores: bool = False,
 ) -> MeasureReport:
     return build_measure_report(
         ledger=ledger,
@@ -181,7 +183,7 @@ def report_from(
         normalization_warnings=(),
         duplicates=(),
         confidence_spread=None,
-        include_raw_nli_scores=False,
+        include_raw_nli_scores=include_raw_nli_scores,
         diagnostics=diagnostics if diagnostics is not None else {},
     )
 
@@ -350,3 +352,53 @@ def test_report_bytes_is_exact_at_every_integer_width(padding: int) -> None:
     """Three-, four- and five-digit sizes must all describe the emitted bytes."""
     report = _padded_report(padding)
     assert len(canonical_json(report).encode("utf-8")) == report.report_bytes
+
+
+# --------------------------------------------------------------------------------------
+# over budget: reduce once, then refuse — never truncate quietly
+# --------------------------------------------------------------------------------------
+
+
+def _oversized(padding: int) -> MeasureReport:
+    """A report carrying inline raw scores and tunable diagnostic padding."""
+    return report_from(
+        PairLedger(entries=entries(40, 20, 40), pairs_total=40, threshold=0.5),
+        diagnostics={"pad": "x" * padding},
+        include_raw_nli_scores=True,
+    )
+
+
+def test_the_reduction_pass_drops_raw_scores_and_still_measures_itself() -> None:
+    """The recovery path was rewritten with the size fix and had no test at all.
+
+    Raw NLI scores are diagnostic, so shedding them is the one reduction allowed before
+    refusing. What comes back must still state its own true size.
+    """
+    with_scores = _oversized(0)
+    assert with_scores.raw_nli_scores, "fixture must carry raw scores to shed"
+    assert with_scores.report_bytes is not None
+    kept = len(with_scores.raw_nli_scores)
+
+    # Push just over the cap, by less than the raw scores are worth.
+    over_by = 200
+    padding = MAX_DEFAULT_REPORT_BYTES - with_scores.report_bytes + over_by
+    reduced = _oversized(padding)
+
+    assert reduced.raw_nli_scores == ()
+    assert reduced.raw_nli_scores_omitted_count >= kept
+    assert reduced.report_bytes is not None
+    assert reduced.report_bytes <= MAX_DEFAULT_REPORT_BYTES
+    assert len(canonical_json(reduced).encode("utf-8")) == reduced.report_bytes
+
+
+def test_an_irreducible_report_is_refused_rather_than_truncated() -> None:
+    """A report that cannot fit is an error, not a silently shortened document."""
+    with pytest.raises(PrismError) as raised:
+        _oversized(MAX_DEFAULT_REPORT_BYTES * 2)
+
+    assert raised.value.code is ErrorCode.OUTPUT_BUDGET_EXCEEDED
+    assert raised.value.diagnostics["limit_bytes"] == MAX_DEFAULT_REPORT_BYTES
+    # The refused size must be the size after reduction was attempted, not before.
+    refused = raised.value.diagnostics["report_bytes"]
+    assert isinstance(refused, int)
+    assert refused > MAX_DEFAULT_REPORT_BYTES
