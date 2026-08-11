@@ -34,8 +34,13 @@ jobs:
 
       - name: pip-audit
         # --strict fails on an incomplete scan rather than reporting a clean result for
-        # packages it could not resolve.
-        run: uv run pip-audit --strict
+        # packages it could not resolve. The target is the exported lock rather than the
+        # environment, matching scripts/release_gate.py: the environment also holds prism
+        # itself, which is unpublished, so --strict would fail on every run for a package
+        # that has no advisory feed to check against.
+        run: |
+          uv export --format requirements-txt --no-emit-project --no-dev -o requirements-audit.txt
+          uv run pip-audit --strict -r requirements-audit.txt
 
       - name: OSV-Scanner
         uses: google/osv-scanner-action/osv-scanner-action@v2.5.0
