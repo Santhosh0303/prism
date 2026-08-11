@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import socket
 import sys
+import time
 from typing import Any, Final, NoReturn
 
 from _gate import REPO_ROOT, GateResult, add_src_to_path, failed, passed, report, skipped
@@ -33,6 +34,7 @@ sys.path.insert(0, str(REPO_ROOT / "benchmarks"))
 from run import load_workload  # noqa: E402
 
 from prism.contracts import PreflightRequest, PrismMode  # noqa: E402
+from prism.measure.models import ModelSessions  # noqa: E402
 from prism.service import PrismService  # noqa: E402
 
 GATE: Final[str] = "G8 offline"
@@ -71,18 +73,32 @@ def run(*, include_measure: bool = True) -> GateResult:
     _attempts.clear()
     workload = load_workload()
 
-    # The service is constructed before the trap so that model loading, which is setup and
-    # not analysis, is not what the gate measures. Verification of the bundle is a separate
-    # gate; this one is about what happens while a request is being served.
+    # Constructing the service loads the perspective registry and nothing else: the ONNX
+    # sessions are built lazily, on the first measurement. This line used to carry a
+    # comment claiming construction was what kept model loading out of the measured
+    # window, which was never true — the ~4 s one-time load happened inside
+    # ``service.measure()``, and therefore inside the workload's own timeout. The gate was
+    # spending most of a 10 s deadline on setup and reporting SKIP when it ran out: a
+    # timeout it caused itself. The sessions are warmed explicitly below instead.
     service = PrismService.from_default_bundle()
     measured = False
+    measure_seconds: float | None = None
 
+    # The trap still goes up before the models are loaded, exactly as it did when loading
+    # happened lazily inside the measurement: loading reads local files and must reach no
+    # network either, and that coverage is unchanged. What changes below is only *when*
+    # the load happens, not whether it is watched.
     _install_network_trap()
     preflight = service.preflight(PreflightRequest(task=workload.question, mode=PrismMode.CRITICAL))
     measurement = None
     if include_measure:
         try:
+            # Build the sessions here so the deadline covers analysis, which is what this
+            # gate is about, rather than a one-time load that happens once per process.
+            ModelSessions.get()
+            started = time.perf_counter()
             measurement = service.measure(workload)
+            measure_seconds = time.perf_counter() - started
             measured = True
         except Exception as error:
             # A broad catch is correct here: the bundle may legitimately be absent, and any
@@ -99,13 +115,19 @@ def run(*, include_measure: bool = True) -> GateResult:
             )
     service.synthesis_contract(preflight, measurement)
 
-    detail = {
+    detail: dict[str, object] = {
         "preflight_checked": True,
         "synthesis_checked": True,
         "measure_checked": measured,
         "network_attempts": len(_attempts),
         "proves": "no Python-level socket use; native-code syscalls are out of scope",
     }
+    if measure_seconds is not None:
+        # Reported so the margin against the workload's own deadline is visible in the
+        # gate output. A gate that is quietly running at 83% of its budget looks identical
+        # to one running at 45% until the day it fails.
+        detail["measure_seconds"] = round(measure_seconds, 2)
+        detail["deadline_seconds"] = workload.config.timeout_seconds
     if _attempts:
         return failed(
             GATE,

@@ -140,7 +140,24 @@ jobs:
         # 403 MB from the pinned immutable revisions. Refuses a mutable ref, an
         # undocumented repository/revision pair, and any file whose bytes do not hash to
         # the manifest.
-        run: uv run python scripts/acquire_models.py
+        #
+        # Retried because this job is blocking and a transient upstream 5xx or reset would
+        # otherwise block the branch on something that is not about the change under test.
+        # Retries are the right answer only because the script is fail-closed and
+        # idempotent: a partial or wrong-hashing file is discarded rather than left behind,
+        # so attempt N+1 starts from a clean state and cannot inherit attempt N's damage.
+        # This absorbs blips, not an outage — a sustained upstream failure still blocks,
+        # which is correct, because the alternative is a green tick over untested code.
+        run: |
+          for attempt in 1 2 3; do
+            if uv run python scripts/acquire_models.py; then
+              exit 0
+            fi
+            echo "::warning::model acquisition attempt ${attempt} failed"
+            sleep $((attempt * 20))
+          done
+          echo "::error::model acquisition failed three times; upstream is unreachable or the pinned bytes have changed"
+          exit 1
 
       - name: Verify the bundle against the committed manifest
         # Runs on a cache hit too. A restored cache is bytes from some earlier job; the
