@@ -33,6 +33,15 @@ MODE_PERSPECTIVE_COUNT: Final[dict[PrismMode, int]] = {
     PrismMode.CRITICAL: 5,
 }
 
+#: Minimum a mode must deliver, whatever ``max_perspectives`` asks for. Only critical has
+#: one: it is the mode documented as five lenses including security and red_team, and it
+#: is the mode chosen for security and irreversible actions, so a caller-supplied ceiling
+#: must not be able to hollow it out. Lite and standard carry no floor — lowering their
+#: count is a preference, not a safety claim.
+MODE_PERSPECTIVE_FLOOR: Final[dict[PrismMode, int]] = {
+    PrismMode.CRITICAL: 5,
+}
+
 #: Critical mode always includes these, regardless of profile.
 MANDATORY_CRITICAL_LENSES: Final[tuple[str, ...]] = ("security", "red_team")
 

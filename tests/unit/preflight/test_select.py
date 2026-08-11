@@ -83,9 +83,24 @@ def test_never_exceeds_the_hard_maximum_of_five(
 
 
 def test_caller_may_lower_but_not_raise_the_count() -> None:
-    assert target_count(PrismMode.CRITICAL, 3) == 3
     assert target_count(PrismMode.LITE, 5) == 3, "the mode allowance is a ceiling"
     assert target_count(PrismMode.STANDARD, None) == 4
+    assert target_count(PrismMode.STANDARD, 3) == 3, "lowering is a preference, allowed"
+
+
+def test_critical_ignores_a_ceiling_below_its_floor() -> None:
+    """Previously ``target_count(CRITICAL, 3)`` returned 3.
+
+    That assertion was removed deliberately, not because it was inconvenient. Both host
+    skills document critical as five lenses including security and red_team, and critical
+    is the mode selected for security work and irreversible actions. A caller-supplied
+    ceiling that silently hollows out the one mode chosen for consequence is the defect,
+    so the floor now wins and the report says it was applied.
+    """
+    assert target_count(PrismMode.CRITICAL, 3) == 5
+    assert target_count(PrismMode.CRITICAL, 4) == 5
+    assert target_count(PrismMode.CRITICAL, 5) == 5
+    assert target_count(PrismMode.CRITICAL, None) == 5
 
 
 # --------------------------------------------------------------------------------------

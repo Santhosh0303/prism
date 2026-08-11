@@ -78,6 +78,17 @@ def build_preflight_contract(
 
     max_claims = max(instruction.claim_budget for instruction in instructions)
 
+    diagnostics: dict[str, str | int | float | bool | None] = {
+        "classification_top_score": classification.top_score,
+        "classification_margin": classification.margin,
+        "perspective_count": len(instructions),
+    }
+    # A ceiling the mode floor overrode is stated, not silently discarded. A caller that
+    # asked for three lenses in critical mode and received five is entitled to know why.
+    if request.max_perspectives is not None and request.max_perspectives < len(instructions):
+        diagnostics["max_perspectives_requested"] = request.max_perspectives
+        diagnostics["max_perspectives_overridden_by"] = f"{request.mode.value}_mode_floor"
+
     return PreflightReport(
         status=PrismStatus.OK,
         task_profile=classification.profile.value,
@@ -94,9 +105,5 @@ def build_preflight_contract(
             untrusted_input_rule=UNTRUSTED_INPUT_RULE,
             packet_schema=PACKET_SCHEMA,
         ),
-        diagnostics={
-            "classification_top_score": classification.top_score,
-            "classification_margin": classification.margin,
-            "perspective_count": len(instructions),
-        },
+        diagnostics=diagnostics,
     )

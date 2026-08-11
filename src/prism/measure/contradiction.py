@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from itertools import combinations
 from typing import Final, Protocol
 
 from ..canonical import canonical_digest
@@ -34,7 +33,7 @@ from ..limits import MAX_INTERNAL_PAIRS
 from .calibration import contradiction_threshold
 from .pair import ClaimPair, PairSet, apply_relevance
 from .scope import classify_scope
-from .segment import ClaimUnit, NormalizedCandidate
+from .segment import ClaimUnit
 
 
 class Encoders(Protocol):
@@ -87,6 +86,11 @@ class PairLedger:
     entries: tuple[LedgerEntry, ...]
     pairs_total: int
     threshold: float
+    #: Within-candidate pairs carrying their E1 relevance, so internal diagnostics can be
+    #: gated on the same subject test the cross-candidate path uses. Not hashed into the
+    #: digest: they are a quality signal about one candidate, never evidence of
+    #: disagreement between candidates, and they never touch the denominator.
+    internal_pairs: tuple[ClaimPair, ...] = ()
     #: Pairs dropped at the relevance floor, as ``(pair_id, relevance)``. They carry no
     #: scope verdict and no NLI score because neither was ever computed for them, but
     #: which pairs were dropped is part of what the ledger records: a relevance threshold
@@ -231,14 +235,16 @@ def build_ledger(pair_set: PairSet, encoders: Encoders) -> PairLedger:
     embeddings = np.asarray(encoders.embed([units[key].text for key in keys]))
     index = {key: position for position, key in enumerate(keys)}
 
-    relevance_scores = tuple(
-        float(
-            embeddings[index[(pair.a.candidate_id, pair.a.claim_id)]]
-            @ embeddings[index[(pair.b.candidate_id, pair.b.claim_id)]]
-        )
-        for pair in cross
-    )
-    scored_pairs = apply_relevance(cross, relevance_scores)
+    def relevance_of(pair: ClaimPair) -> float:
+        left = index.get((pair.a.candidate_id, pair.a.claim_id))
+        right = index.get((pair.b.candidate_id, pair.b.claim_id))
+        if left is None or right is None:
+            # Unreachable while every viable unit appears in some cross pair. Scoring it
+            # zero keeps an unforeseen input out of the diagnostics rather than raising.
+            return 0.0
+        return float(embeddings[left] @ embeddings[right])
+
+    scored_pairs = apply_relevance(cross, tuple(relevance_of(pair) for pair in cross))
     relevant = tuple(pair for pair in scored_pairs if pair.is_relevant)
     irrelevant = tuple(
         (pair.pair_id, float(pair.relevance if pair.relevance is not None else 0.0))
@@ -271,11 +277,19 @@ def build_ledger(pair_set: PairSet, encoders: Encoders) -> PairLedger:
         for pair in relevant
     )
 
+    # Within-candidate pairs are scored with the embeddings already computed above, so the
+    # subject gate on internal diagnostics costs no additional inference.
+    internal_pairs = apply_relevance(
+        pair_set.internal_pairs,
+        tuple(relevance_of(pair) for pair in pair_set.internal_pairs),
+    )
+
     return PairLedger(
         entries=entries,
         pairs_total=len(cross),
         threshold=threshold,
         irrelevant_pairs=irrelevant,
+        internal_pairs=internal_pairs,
     )
 
 
@@ -303,81 +317,85 @@ _BOOLEAN_PAIRS: Final[tuple[tuple[str, str], ...]] = (
 
 
 def detect_internal_conflicts(
-    candidates: tuple[NormalizedCandidate, ...],
+    internal_pairs: tuple[ClaimPair, ...],
 ) -> tuple[InternalConflict, ...]:
     """Find exact conflicts between claims inside a single candidate.
 
     A candidate that contradicts itself is a quality signal about that candidate. Folding
     it into the cross-candidate rate would misattribute it as disagreement between
     reviewers, so it is reported separately and never changes the denominator.
+
+    Pairs must clear the same E1 relevance floor the cross-candidate path uses. Without
+    that gate the patterns below fire on any two claims that merely mention different
+    versions, dates, or same-unit numbers — "the parser is at v1.2" and "the scheduler is
+    at v2.0" became a self-contradiction, which is a false accusation against a candidate
+    that said nothing inconsistent.
     """
     conflicts: list[InternalConflict] = []
-    for candidate in candidates:
-        pairs = list(combinations(candidate.units, 2))[:MAX_INTERNAL_PAIRS]
-        for unit_a, unit_b in pairs:
-            view_a, view_b = unit_a.matching_view, unit_b.matching_view
+    for pair in internal_pairs[:MAX_INTERNAL_PAIRS]:
+        if not pair.is_relevant:
+            continue
+        unit_a, unit_b = pair.a, pair.b
+        view_a, view_b = unit_a.matching_view, unit_b.matching_view
 
-            for positive, negative in _BOOLEAN_PAIRS:
-                if (negative in view_a and positive in view_b and negative not in view_b) or (
-                    negative in view_b and positive in view_a and negative not in view_a
-                ):
-                    conflicts.append(
-                        _conflict(
-                            candidate,
-                            unit_a,
-                            unit_b,
-                            InternalConflictKind.BOOLEAN_CONFLICT,
-                            f"{positive!r} versus {negative!r}",
-                        )
-                    )
-                    break
-
-            for pattern, kind in (
-                (_VERSION_PATTERN, InternalConflictKind.VERSION_CONFLICT),
-                (_DATE_PATTERN, InternalConflictKind.DATE_CONFLICT),
+        for positive, negative in _BOOLEAN_PAIRS:
+            if (negative in view_a and positive in view_b and negative not in view_b) or (
+                negative in view_b and positive in view_a and negative not in view_a
             ):
-                found_a = set(pattern.findall(view_a))
-                found_b = set(pattern.findall(view_b))
-                if found_a and found_b and not (found_a & found_b):
-                    conflicts.append(
-                        _conflict(
-                            candidate,
-                            unit_a,
-                            unit_b,
-                            kind,
-                            f"{sorted(found_a)[0]} versus {sorted(found_b)[0]}",
-                        )
+                conflicts.append(
+                    _conflict(
+                        unit_a,
+                        unit_b,
+                        InternalConflictKind.BOOLEAN_CONFLICT,
+                        f"{positive!r} versus {negative!r}",
                     )
+                )
+                break
 
-            # Numeric conflicts are only claimed when the unit matches, which is the
-            # conservative reading: 10 ms and 10 GB are not in disagreement.
-            numbers_a = {unit: value for value, unit in _NUMBER_UNIT_PATTERN.findall(view_a)}
-            numbers_b = {unit: value for value, unit in _NUMBER_UNIT_PATTERN.findall(view_b)}
-            for unit in sorted(set(numbers_a) & set(numbers_b)):
-                if numbers_a[unit] != numbers_b[unit]:
-                    conflicts.append(
-                        _conflict(
-                            candidate,
-                            unit_a,
-                            unit_b,
-                            InternalConflictKind.NUMERIC_CONFLICT,
-                            f"{numbers_a[unit]}{unit} versus {numbers_b[unit]}{unit}",
-                        )
+        for pattern, kind in (
+            (_VERSION_PATTERN, InternalConflictKind.VERSION_CONFLICT),
+            (_DATE_PATTERN, InternalConflictKind.DATE_CONFLICT),
+        ):
+            found_a = set(pattern.findall(view_a))
+            found_b = set(pattern.findall(view_b))
+            if found_a and found_b and not (found_a & found_b):
+                conflicts.append(
+                    _conflict(
+                        unit_a,
+                        unit_b,
+                        kind,
+                        f"{sorted(found_a)[0]} versus {sorted(found_b)[0]}",
                     )
-                    break
+                )
+
+        # Numeric conflicts are only claimed when the unit matches, which is the
+        # conservative reading: 10 ms and 10 GB are not in disagreement.
+        numbers_a = {unit: value for value, unit in _NUMBER_UNIT_PATTERN.findall(view_a)}
+        numbers_b = {unit: value for value, unit in _NUMBER_UNIT_PATTERN.findall(view_b)}
+        for unit in sorted(set(numbers_a) & set(numbers_b)):
+            if numbers_a[unit] != numbers_b[unit]:
+                conflicts.append(
+                    _conflict(
+                        unit_a,
+                        unit_b,
+                        InternalConflictKind.NUMERIC_CONFLICT,
+                        f"{numbers_a[unit]}{unit} versus {numbers_b[unit]}{unit}",
+                    )
+                )
+                break
 
     return tuple(conflicts[:MAX_INTERNAL_PAIRS])
 
 
 def _conflict(
-    candidate: NormalizedCandidate,
     unit_a: ClaimUnit,
     unit_b: ClaimUnit,
     kind: InternalConflictKind,
     detail: str,
 ) -> InternalConflict:
+    """Both units belong to one candidate: an internal pair never crosses candidates."""
     return InternalConflict(
-        candidate_id=candidate.candidate_id,
+        candidate_id=unit_a.candidate_id,
         claim_a_id=unit_a.claim_id,
         claim_b_id=unit_b.claim_id,
         kind=kind,

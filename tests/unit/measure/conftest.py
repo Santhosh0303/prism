@@ -9,6 +9,8 @@ denominator bug cannot hide behind model noise.
 
 from __future__ import annotations
 
+import hashlib
+
 import numpy as np
 import pytest
 
@@ -29,10 +31,22 @@ class FakeEncoders:
     is that the arithmetic downstream is exercised with known inputs.
     """
 
-    def __init__(self, dimensions: int = 8) -> None:
+    def __init__(self, dimensions: int = 64) -> None:
         self.dimensions = dimensions
         self.embed_calls = 0
         self.nli_calls = 0
+
+    def _axis(self, subject: str) -> int:
+        """Stable across processes and ``PYTHONHASHSEED`` values.
+
+        This used ``hash(subject)``, which Python salts per process. Two subjects that
+        landed on separate axes in one run collided in the next, so a test asserting that
+        unrelated claims are *not* relevant passed or failed depending on the seed. A
+        fixture whose behaviour changes run to run cannot support an exact assertion.
+        """
+        return int.from_bytes(hashlib.sha256(subject.encode("utf-8")).digest()[:4], "big") % (
+            self.dimensions
+        )
 
     def embed(self, texts: list[str]) -> np.ndarray:
         self.embed_calls += 1
@@ -41,7 +55,7 @@ class FakeEncoders:
             vector = np.zeros(self.dimensions, dtype=np.float32)
             # Bucket by the first token so claims sharing a subject land on the same axis.
             subject = text.split()[0].strip(".,").casefold().removeprefix("not-")
-            vector[hash(subject) % self.dimensions] = 1.0
+            vector[self._axis(subject)] = 1.0
             vectors.append(vector)
         return np.array(vectors, dtype=np.float32)
 

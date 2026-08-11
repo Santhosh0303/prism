@@ -17,6 +17,7 @@ from .profiles import (
     GENERAL_FALLBACK_ORDER,
     MANDATORY_CRITICAL_LENSES,
     MODE_PERSPECTIVE_COUNT,
+    MODE_PERSPECTIVE_FLOOR,
     PROFILE_PRIORITY,
     TaskProfile,
 )
@@ -28,11 +29,19 @@ def target_count(mode: PrismMode, max_perspectives: int | None) -> int:
 
     A caller may lower the count but never raise it above the mode's allowance: five is a
     hard ceiling and the mode already encodes the intended review depth.
+
+    Critical is the exception, and deliberately so. Both host skills tell the user that
+    critical means five lenses including ``security`` and ``red_team``; a caller passing
+    ``max_perspectives=3`` used to get three, so the mode quietly stopped meaning what the
+    documentation says it means — on the one mode chosen for security and irreversible
+    actions. The floor wins over the caller's ceiling there. The override is recorded in
+    the report's diagnostics rather than swallowed: see
+    :func:`prism.preflight.contract.build_preflight_contract`.
     """
     allowed = MODE_PERSPECTIVE_COUNT[mode]
     if max_perspectives is None:
         return allowed
-    return min(allowed, max_perspectives)
+    return max(MODE_PERSPECTIVE_FLOOR.get(mode, 0), min(allowed, max_perspectives))
 
 
 def select_perspectives(

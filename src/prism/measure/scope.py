@@ -107,6 +107,21 @@ def _is_negated(tokens: list[str], index: int) -> bool:
     return any(token in _NEGATIONS for token in tokens[start:index])
 
 
+def _phrase_positions(text: str, phrase: str) -> list[int]:
+    """Every occurrence, not just the first. Overlaps are included by design."""
+    positions: list[int] = []
+    start = text.find(phrase)
+    while start != -1:
+        positions.append(start)
+        start = text.find(phrase, start + 1)
+    return positions
+
+
+def _phrase_is_negated(text: str, position: int) -> bool:
+    preceding = _token_positions(text[:position])
+    return any(token in _NEGATIONS for token in preceding[-_NEGATION_WINDOW:])
+
+
 def detect_markers(matching_view: str) -> dict[str, set[str]]:
     """Return the believed scope values per dimension for one claim.
 
@@ -120,11 +135,14 @@ def detect_markers(matching_view: str) -> dict[str, set[str]]:
         for value, phrases in values.items():
             for phrase in phrases:
                 if " " in phrase:
-                    position = matching_view.find(phrase)
-                    if position == -1:
+                    # Every occurrence is inspected, and one affirmative use is enough.
+                    # Reading only the first meant "not proof of concept before, but proof
+                    # of concept now" reported no marker at all: the leading negation
+                    # suppressed a phrase the sentence goes on to assert.
+                    positions = _phrase_positions(matching_view, phrase)
+                    if not positions:
                         continue
-                    preceding = _token_positions(matching_view[:position])
-                    if any(token in _NEGATIONS for token in preceding[-_NEGATION_WINDOW:]):
+                    if all(_phrase_is_negated(matching_view, position) for position in positions):
                         continue
                 else:
                     indices = [i for i, token in enumerate(tokens) if token == phrase]
