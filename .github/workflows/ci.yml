@@ -110,6 +110,49 @@ jobs:
         # not.
         run: uv run pytest tests/regression tests/contract tests/compatibility -q
 
+  model-dependent:
+    name: Measurement on the real bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Sync the locked environment
+        run: uv sync --frozen
+
+      - name: Restore the pinned model bundle
+        id: bundle
+        uses: actions/cache@v6
+        with:
+          path: models/artifacts
+          # Keyed on the committed manifest's bytes. Adopting a new pinned revision
+          # changes the manifest, misses the cache, and re-fetches — so a stale cache
+          # cannot quietly serve yesterday's weights to today's assertions.
+          key: model-bundle-${{ hashFiles('models/artifacts/manifest.json') }}
+
+      - name: Acquire the bundle
+        if: steps.bundle.outputs.cache-hit != 'true'
+        # 403 MB from the pinned immutable revisions. Refuses a mutable ref, an
+        # undocumented repository/revision pair, and any file whose bytes do not hash to
+        # the manifest.
+        run: uv run python scripts/acquire_models.py
+
+      - name: Verify the bundle against the committed manifest
+        # Runs on a cache hit too. A restored cache is bytes from some earlier job; the
+        # manifest is the only thing that decides whether they are the right bytes.
+        run: uv run python scripts/verify_models.py
+
+      - name: Measurement tests
+        # The parity assertion for measurement lives here. Without this job it is
+        # deselected everywhere except a maintainer's laptop, which is the same as not
+        # having it.
+        run: uv run pytest -m "models and not endurance" -q
+
   reproducible-build:
     name: Reproducible build
     runs-on: ubuntu-latest
