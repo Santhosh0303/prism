@@ -131,6 +131,24 @@ def model_root() -> Path:
     return (Path(__file__).resolve().parents[3] / "models" / "artifacts").resolve()
 
 
+def resolve_model_root(root: Path | None = None) -> Path:
+    """Canonical form of a caller-supplied root, or the default root.
+
+    Session identity is keyed on this value, so two spellings of one directory must not
+    look like two roots.
+    """
+    return root.resolve() if root is not None else model_root()
+
+
+def manifest_present(root: Path | None = None) -> bool:
+    """Cheap presence check: is there a manifest to verify at all?
+
+    Presence is not verification. Shallow health uses this to avoid claiming measurement
+    is available in a clone that carries no bundle; deep health is what actually hashes.
+    """
+    return (resolve_model_root(root) / MODEL_MANIFEST_FILENAME).is_file()
+
+
 def measurement_disabled() -> bool:
     """True when the kill switch is set."""
     return os.environ.get(DISABLE_MEASURE_ENV_VAR, "") not in {"", "0", "false", "False"}
@@ -170,6 +188,12 @@ def _resolve_contained(root: Path, relative: str) -> Path:
     the containment check is performed on the resolved path and the link check on the
     unresolved one — a link that resolves inside the root is still a link, and v1 does
     not accept them.
+
+    Hard links are rejected too, by link count. A hard link is a second name for the
+    same inode, so an artifact with ``st_nlink > 1`` can be rewritten through a name
+    outside the verified root between this check and the ONNX session opening it. The
+    threat model names unexpected hard links as a rejected case "where detectable";
+    ``st_nlink`` is reported on Windows and POSIX alike, so here it is detectable.
     """
     if Path(relative).is_absolute() or ".." in Path(relative).parts:
         raise PrismError(
@@ -196,6 +220,14 @@ def _resolve_contained(root: Path, relative: str) -> Path:
             code=ErrorCode.MODEL_UNAVAILABLE,
             message="A model artifact listed in the manifest is missing.",
             diagnostics={"path": relative},
+        )
+    link_count = resolved.stat().st_nlink
+    if link_count > 1:
+        raise PrismError(
+            code=ErrorCode.MODEL_INTEGRITY_FAILURE,
+            message="A model artifact has more than one hard link. Unexpected hard links "
+            "are not accepted.",
+            diagnostics={"path": relative, "link_count": link_count},
         )
     return resolved
 
@@ -284,6 +316,20 @@ def _session_options() -> ort.SessionOptions:
     return options
 
 
+def _load_tokenizer(path: Path) -> Tokenizer:
+    """Load a tokenizer and fix its encoding parameters once, at construction.
+
+    Truncation and padding used to be re-enabled inside every encode call. Two
+    measurements may run concurrently and they share these objects, so one thread was
+    mutating encoder state another thread was already encoding against. Configuring here
+    means the shared tokenizers are read-only for the life of the process.
+    """
+    tokenizer = Tokenizer.from_file(str(path))
+    tokenizer.enable_truncation(max_length=MAX_SEQUENCE_LENGTH)
+    tokenizer.enable_padding()
+    return tokenizer
+
+
 def _create_session(path: Path) -> ort.InferenceSession:
     session = ort.InferenceSession(
         str(path),
@@ -309,6 +355,12 @@ class ModelSessions:
     release-blocking leak, not a performance detail: two copies of E2 would double a
     328 MB resident footprint and quietly breach the resident-memory budget. The
     stress suite asserts that ten simultaneous cold callers create exactly one pair.
+
+    One pair per process is a memory decision, not a licence to ignore which bundle was
+    asked for. The cached pair carries the canonical root it was built from and the
+    digest of the manifest it was verified against; a request naming a different root, or
+    the same root whose manifest has since changed, raises rather than being served the
+    first bundle under the second bundle's name.
     """
 
     _instance: ModelSessions | None = None
@@ -321,7 +373,10 @@ class ModelSessions:
         relevance_tokenizer: Tokenizer,
         nli_session: ort.InferenceSession,
         nli_tokenizer: Tokenizer,
+        root: Path | None = None,
     ) -> None:
+        self.root = resolve_model_root(root)
+        self.manifest_digest = manifest.digest
         self.manifest = manifest
         self._relevance_session = relevance_session
         self._relevance_tokenizer = relevance_tokenizer
@@ -346,25 +401,55 @@ class ModelSessions:
                 "synthesis remain available.",
                 diagnostics={"env_var": DISABLE_MEASURE_ENV_VAR},
             )
-        if cls._instance is not None:
-            return cls._instance
+        requested = resolve_model_root(root)
+        cached = cls._instance
+        if cached is not None:
+            cached._assert_identity(requested)
+            return cached
         with cls._lock:
             # Re-checked inside the lock: ten simultaneous first callers must produce
             # exactly one E1 and one E2 session.
             if cls._instance is None:
-                cls._instance = cls._build(root)
+                cls._instance = cls._build(requested)
+            else:
+                cls._instance._assert_identity(requested)
         return cls._instance
 
+    def _assert_identity(self, root: Path) -> None:
+        """Confirm the cached pair is the bundle this caller asked for.
+
+        Serving a cached bundle for a root it did not come from would make the reported
+        ``model_manifest_hash`` describe artifacts that were never loaded, which is worse
+        than being unavailable. The manifest is re-read here — a few kilobytes against a
+        measurement measured in seconds — so a manifest swapped beneath a live process is
+        caught rather than papered over by the cache.
+        """
+        if root != self.root:
+            raise PrismError(
+                code=ErrorCode.MODEL_INTEGRITY_FAILURE,
+                message="Encoder sessions were already created from a different model "
+                "root. One process serves one model bundle.",
+                diagnostics={"reason": "model_root_mismatch"},
+            )
+        if load_manifest(root).digest != self.manifest_digest:
+            raise PrismError(
+                code=ErrorCode.MODEL_INTEGRITY_FAILURE,
+                message="The model manifest changed after the encoder sessions were "
+                "created. Restart before measuring again.",
+                diagnostics={"reason": "manifest_digest_mismatch"},
+            )
+
     @classmethod
-    def _build(cls, root: Path | None) -> ModelSessions:
+    def _build(cls, root: Path) -> ModelSessions:
         manifest = load_manifest(root)
         paths = verify_model_bundle(manifest, root)
         return cls(
             manifest=manifest,
             relevance_session=_create_session(paths["relevance:graph"]),
-            relevance_tokenizer=Tokenizer.from_file(str(paths["relevance:tokenizer"])),
+            relevance_tokenizer=_load_tokenizer(paths["relevance:tokenizer"]),
             nli_session=_create_session(paths["nli:graph"]),
-            nli_tokenizer=Tokenizer.from_file(str(paths["nli:tokenizer"])),
+            nli_tokenizer=_load_tokenizer(paths["nli:tokenizer"]),
+            root=root,
         )
 
     @classmethod
@@ -383,8 +468,8 @@ class ModelSessions:
     def _encode_batch(
         tokenizer: Tokenizer, session: ort.InferenceSession, texts: list[str]
     ) -> dict[str, np.ndarray]:
-        tokenizer.enable_truncation(max_length=MAX_SEQUENCE_LENGTH)
-        tokenizer.enable_padding()
+        # No tokenizer configuration here: these objects are shared by concurrent
+        # measurements and are configured once, in _load_tokenizer.
         encodings = tokenizer.encode_batch(texts)
         input_ids = np.array([e.ids for e in encodings], dtype=np.int64)
         attention_mask = np.array([e.attention_mask for e in encodings], dtype=np.int64)
@@ -422,8 +507,6 @@ class ModelSessions:
         """
         if not pairs:
             return np.zeros((0,), dtype=np.float32)
-        self._nli_tokenizer.enable_truncation(max_length=MAX_SEQUENCE_LENGTH)
-        self._nli_tokenizer.enable_padding()
         encodings = self._nli_tokenizer.encode_batch(pairs)
         feed: dict[str, np.ndarray] = {
             "input_ids": np.array([e.ids for e in encodings], dtype=np.int64),

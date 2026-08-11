@@ -34,8 +34,17 @@ or evaluator, and never used to select a code path by name.
 ### 2. PRISM → local model bundle
 
 Every artifact is canonicalised beneath a dedicated root, confirmed to be a regular file,
-size-checked, and SHA-256 verified **before** ONNX Runtime opens anything. Symlinks, path
-traversal, and ONNX external-data references fail closed with `MODEL_INTEGRITY_FAILURE`.
+size-checked, and SHA-256 verified **before** ONNX Runtime opens anything. Symlinks, hard
+links, path traversal, and ONNX external-data references fail closed with
+`MODEL_INTEGRITY_FAILURE`. A hard link is rejected by link count (`st_nlink > 1`): a second
+name for the same inode is a name outside the verified root through which the bytes can be
+rewritten after they were hashed.
+
+One process serves one model bundle. Encoder sessions are cached process-wide for memory
+reasons, and that cache is keyed on the canonical model root plus the digest of the manifest
+the bundle was verified against. A request naming a different root, or the same root whose
+manifest has since changed, raises rather than being served the first bundle under the
+second bundle's name.
 
 *What this proves:* the bytes are the bytes that were pinned. *What it does not:* that those
 bytes are safe. A correctly hashed artifact with an unknown flaw verifies perfectly. The
