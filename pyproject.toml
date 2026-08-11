@@ -1,5 +1,8 @@
 [project]
-name = "prism"
+# The distribution name is not the import name. "prism" on PyPI is an unrelated
+# Bayesian/MCMC project, so a documented `uv tool install prism` installed someone else's
+# code. The import package stays `prism` and both console scripts keep their names.
+name = "prism-preflight"
 version = "0.1.0"
 description = "Local-first, model-agnostic reasoning preflight and contradiction-measurement component for AI harnesses."
 readme = "README.md"
@@ -36,6 +39,11 @@ prism-mcp = "prism.mcp_server:main"
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# uv_build derives the module from the distribution name. The distribution is
+# `prism-preflight` and the import package is, and stays, `prism`.
+module-name = "prism"
 
 [dependency-groups]
 dev = [

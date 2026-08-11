@@ -2,11 +2,17 @@
 
 ## Install
 
-1. Install the package so that `prism-mcp` is on PATH:
+1. Install the package so that `prism-mcp` is on PATH. There is no PyPI release yet, and
+   `prism` on PyPI is an unrelated project, so install from an exact commit — never from a
+   floating name or branch:
 
    ```
-   uv tool install prism
+   uv tool install "git+https://github.com/Santhosh0303/prism@<full-commit-sha>"
    ```
+
+   Pin the full SHA of the commit you reviewed — a branch name resolves to whatever was
+   pushed last. The distribution is named `prism-preflight`; the commands it installs are
+   `prism` and `prism-mcp`. When a tagged, signed release exists, pin that tag instead.
 
 2. Verify before wiring it up:
 

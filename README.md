@@ -75,6 +75,24 @@ re-verifies hashes, sizes, and path containment before any session is created. S
 Preflight, synthesis, and health need none of it — PRISM is fully usable without the
 bundle, and `PRISM_DISABLE_MEASURE=1` makes that mode explicit.
 
+There is no PyPI release. The distribution is named `prism-preflight` — `prism` on PyPI is
+an unrelated Bayesian/MCMC project — and until a tagged, signed release exists, the
+documented way to install the MCP server elsewhere is an exact commit, not a name:
+
+```bash
+uv tool install "git+https://github.com/Santhosh0303/prism@<commit>"
+```
+
+### What the lock covers, and what it does not
+
+`uv sync` and the reproducible-build gate are lock-bound: exact versions, exact hashes.
+An installed wheel is not. `pyproject.toml` declares compatible ranges (`mcp>=2,<3`,
+`onnxruntime>=1.20,<2`, and four more), so any install resolves them independently of
+`uv.lock`, and the same command run a month later can produce different transitive
+versions. The lock governs this repository's development and CI environments; it does not
+travel inside the wheel. For a lock-bound deployment, clone at a pinned commit and run
+`uv sync --frozen` rather than installing the distribution.
+
 ## Use
 
 ```bash
@@ -157,9 +175,9 @@ figures are in [`docs/performance.md`](docs/performance.md). Preflight is effect
 ## Verification
 
 ```
-433 tests passing, 2 deselected (endurance)
+504 tests passing, 2 deselected (endurance)
 ruff check + ruff format --check    clean
-mypy --strict (src + tests)         no issues, 66 files
+mypy --strict (src + tests)         no issues, 74 files
 bandit                              0 issues
 vulture / deptry                    0 findings / no issues
 import-linter                       5 architecture contracts kept, 0 broken
@@ -173,7 +191,7 @@ One command runs all of it:
 uv run python scripts/release_gate.py --text
 ```
 
-Sixteen gates pass and one reports `SKIP`: there is no evaluation corpus, so no accuracy
+Seventeen gates pass and one reports `SKIP`: there is no evaluation corpus, so no accuracy
 figure can be published. Under `--strict` a skip blocks and the unsigned baseline blocks
 too, so **`--strict` fails on this build by design** — a check that did not run has not
 passed.

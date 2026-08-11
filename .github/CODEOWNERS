@@ -1,0 +1,16 @@
+# Every path has one owner, and review is required on the protected branch.
+# The trust-boundary code and the evidence machinery are listed separately so a change
+# there is never merged as a routine edit.
+
+*                       @Santhosh0303
+
+# Trust boundaries: untrusted input, the model bundle, and the registry override.
+/src/prism/limits.py            @Santhosh0303
+/src/prism/measure/models.py    @Santhosh0303
+/src/prism/preflight/registry.py @Santhosh0303
+/src/prism/contracts.py         @Santhosh0303
+
+# Evidence machinery. A weakened gate is a silent regression in everything it gates.
+/scripts/                @Santhosh0303
+/.github/workflows/      @Santhosh0303
+/models/artifacts/manifest.json @Santhosh0303

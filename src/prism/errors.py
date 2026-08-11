@@ -102,8 +102,10 @@ _RECOVERY: Final[dict[ErrorCode, Recovery]] = {
         component="model_bundle",
         retryable=False,
         safe_action="An artifact does not match its pinned hash or escapes the model root. "
-        "Do not attempt to bypass this. Restore the bundle from the signed "
-        "release and rerun 'prism health --deep' before measuring again.",
+        "Do not attempt to bypass this. Re-obtain the artifacts at the exact "
+        "revisions in docs/model-card.md, rerun 'python scripts/verify_models.py' "
+        "and then 'prism health --deep' before measuring again. Measurement stays "
+        "unavailable until it verifies; preflight is unaffected.",
     ),
     ErrorCode.CONFIG_INTEGRITY_FAILURE: Recovery(
         component="registry",

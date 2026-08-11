@@ -24,4 +24,4 @@ SOFTWARE.
 
 The model artifacts PRISM verifies and loads are NOT covered by this licence.
 Their upstream repository, immutable revision, and licence are recorded in
-models/manifest.json and docs/model-card.md, and are subject to their own terms.
+models/artifacts/manifest.json and docs/model-card.md, and are subject to their own terms.
