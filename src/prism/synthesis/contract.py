@@ -22,6 +22,7 @@ from __future__ import annotations
 
 from typing import Final
 
+from ..constants import CALIBRATION_HUMAN_VALIDATED
 from ..contracts import (
     AgreementType,
     MeasureReport,
@@ -30,7 +31,6 @@ from ..contracts import (
     SourceDiversity,
     SynthesisContract,
 )
-from ..measure.calibration import is_calibrated
 
 #: Non-negotiable. These appear in every contract regardless of measurement state.
 PROHIBITED_SHORTCUTS: Final[tuple[str, ...]] = (
@@ -44,10 +44,25 @@ PROHIBITED_SHORTCUTS: Final[tuple[str, ...]] = (
 FINAL_ANSWER_STRUCTURE: Final[tuple[str, ...]] = (
     "Answer the original task directly.",
     "State facts, assumptions, and recommendations separately and label which is which.",
-    "Disclose every unresolved contradiction, with the claim identifiers involved.",
+    # The old wording was "disclose every unresolved contradiction". A report is bounded:
+    # inline detail is capped and the remainder is reported as a count, so "every" was a
+    # promise the contract could not keep. The count is disclosed instead of the detail,
+    # and the digest is what lets a holder of the full ledger check the rest.
+    "Disclose every contradiction this contract names, with the claim identifiers "
+    "involved, and state the omitted counts it reports alongside them.",
     "Preserve retained distinct claims, including named risks and failure modes.",
     "Note scope differences where two findings apply to different contexts.",
 )
+
+
+def _report_is_calibrated(measurement: MeasureReport) -> bool:
+    """Read calibration off the report, never off this process.
+
+    A report can be imported, replayed, or produced by another version. Narrating it
+    against whatever the running build happens to be calibrated to would describe a
+    measurement that never took place.
+    """
+    return measurement.calibration_status == CALIBRATION_HUMAN_VALIDATED
 
 
 def build_synthesis_contract(
@@ -79,7 +94,7 @@ def build_synthesis_contract(
 
     retained_ids = [claim.claim_id for claim in measurement.retained_distinct_claims]
 
-    if not is_calibrated():
+    if not _report_is_calibrated(measurement):
         limitations.append(
             f"The contradiction threshold is {measurement.calibration_status}. Any "
             "contradiction figure in this report is provisional and carries no validated "
@@ -119,7 +134,7 @@ def build_synthesis_contract(
             f"{measurement.contradictions_omitted_count} further contradicting pairs were "
             "omitted from inline detail; the full ledger digest is in the report."
         )
-    if not is_calibrated() and measurement.experimental_contradiction_count:
+    if not _report_is_calibrated(measurement) and measurement.experimental_contradiction_count:
         unresolved.append(
             f"{measurement.experimental_contradiction_count} pairs crossed the provisional "
             "threshold. Review them yourself; do not report them as a measured finding."
@@ -131,11 +146,21 @@ def build_synthesis_contract(
             f"{divergent.dimension} ({divergent.marker_a} versus {divergent.marker_b}); "
             "they may both hold in their own scope."
         )
+    if measurement.scope_divergent_omitted_count:
+        scope_differences.append(
+            f"{measurement.scope_divergent_omitted_count} further scope-divergent pairs "
+            "were omitted from inline detail; they are counted, not shown."
+        )
 
     for conflict in measurement.internal_conflicts:
         disclosures.append(
             f"Candidate {conflict.candidate_id} contradicts itself between "
             f"{conflict.claim_a_id} and {conflict.claim_b_id} ({conflict.kind.value})."
+        )
+    if measurement.internal_conflicts_omitted_count:
+        disclosures.append(
+            f"{measurement.internal_conflicts_omitted_count} further internal conflicts "
+            "were omitted from inline detail; they are counted, not shown."
         )
 
     for duplicate in measurement.duplicate_candidates:
