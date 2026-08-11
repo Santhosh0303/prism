@@ -72,12 +72,13 @@ def make_packet(
     candidate_id: str,
     texts: list[str],
     source_group_id: str = "host-pass-001",
+    provenance: ProvenanceStatus = ProvenanceStatus.DECLARED_UNVERIFIED,
 ) -> CandidatePacket:
     return CandidatePacket(
         candidate_id=candidate_id,
         source_group_id=source_group_id,
         source_label=f"label-{candidate_id}",
-        provenance_status=ProvenanceStatus.DECLARED_UNVERIFIED,
+        provenance_status=provenance,
         perspective=candidate_id,
         claims=tuple(
             make_claim(f"{candidate_id}-{index + 1}", text) for index, text in enumerate(texts)
