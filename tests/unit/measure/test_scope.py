@@ -154,6 +154,32 @@ def test_marker_does_not_fire_inside_a_longer_word() -> None:
     assert "live" not in markers.get("lifecycle", set())
 
 
+def test_a_negated_first_use_does_not_suppress_a_later_affirmative_one() -> None:
+    """The audit's sentence, verbatim.
+
+    Only the first occurrence of a multi-word phrase used to be inspected, so the leading
+    negation suppressed the marker entirely and the claim read as having no lifecycle
+    scope at all — while the sentence plainly asserts one.
+    """
+    markers = detect_markers(
+        matching_view("This is not proof of concept before, but proof of concept now.")
+    )
+    assert "prototype" in markers.get("lifecycle", set())
+
+
+def test_every_occurrence_negated_still_suppresses_the_marker() -> None:
+    """The fix must not turn into "any mention counts"."""
+    markers = detect_markers(
+        matching_view("It is not proof of concept work, and it is not proof of concept quality.")
+    )
+    assert "prototype" not in markers.get("lifecycle", set())
+
+
+def test_a_single_affirmative_phrase_still_registers() -> None:
+    markers = detect_markers(matching_view("The service runs as generally available today."))
+    assert "production" in markers.get("lifecycle", set())
+
+
 def test_classification_is_deterministic() -> None:
     pair = pair_of(
         "Latency stays under one second at the current prototype load levels tested.",

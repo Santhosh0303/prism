@@ -15,6 +15,8 @@ from hypothesis import strategies as st
 from prism.canonical import canonical_json
 from prism.contracts import (
     AgreementType,
+    InternalConflict,
+    InternalConflictKind,
     MeasureReport,
     PrismStatus,
     ProvenanceStatus,
@@ -23,7 +25,12 @@ from prism.contracts import (
 )
 from prism.errors import ErrorCode, PrismError
 from prism.limits import MAX_DEFAULT_REPORT_BYTES, MAX_INLINE_PAIR_DETAILS
-from prism.measure.contradiction import LedgerEntry, PairLedger, build_ledger
+from prism.measure.contradiction import (
+    LedgerEntry,
+    PairLedger,
+    build_ledger,
+    detect_internal_conflicts,
+)
 from prism.measure.pair import enumerate_pairs
 from prism.measure.project import build_measure_report
 
@@ -246,6 +253,60 @@ def test_report_can_be_reconstructed_from_the_raw_ledger() -> None:
     assert report.contradiction_denominator == recomputed_denominator
     assert report.experimental_contradiction_count == recomputed_count
     assert report.pair_ledger_digest == ledger.digest
+
+
+# --------------------------------------------------------------------------------------
+# internal conflicts accuse one candidate, so they need the same subject gate
+# --------------------------------------------------------------------------------------
+
+
+def internal_conflicts_for(
+    texts: list[str], encoders: FakeEncoders
+) -> tuple[InternalConflict, ...]:
+    """Run the real pipeline for one candidate's claims, with a second candidate present.
+
+    Two candidates are required for cross pairs to exist, which is what produces the
+    embeddings the internal subject gate reuses.
+    """
+    ledger = ledger_from(texts, [f"zulu {FILLER}"], encoders)
+    return detect_internal_conflicts(ledger.internal_pairs)
+
+
+def test_two_unrelated_components_are_not_a_self_contradiction(encoders: FakeEncoders) -> None:
+    """The audit's case: differing versions about different subjects.
+
+    "the parser is at v1.2" and "the scheduler is at v2.0" are both true and describe
+    different things. Without a subject gate the version pattern fired on any two claims
+    carrying different version strings, and the candidate was told it contradicted itself.
+    """
+    ledger = ledger_from(
+        [f"parser reached v1.2 {FILLER}", f"scheduler reached v2.0 {FILLER}"],
+        [f"zulu {FILLER}"],
+        encoders,
+    )
+    # The pair is enumerated and both claims do carry version strings, so the pattern
+    # would fire. The subject gate is the only thing standing between them.
+    internal = [p for p in ledger.internal_pairs if p.a.candidate_id == "a"]
+    assert internal, "the within-candidate pair must exist for the gate to be what stops it"
+    assert not any(pair.is_relevant for pair in internal)
+    assert detect_internal_conflicts(ledger.internal_pairs) == ()
+
+
+def test_the_same_subject_at_two_versions_is_still_a_conflict(encoders: FakeEncoders) -> None:
+    """The gate must not silence the real finding it was added to protect."""
+    conflicts = internal_conflicts_for(
+        [f"parser reached v1.2 {FILLER}", f"parser reached v2.0 {FILLER}"], encoders
+    )
+    assert [c.kind for c in conflicts] == [InternalConflictKind.VERSION_CONFLICT]
+    assert conflicts[0].candidate_id == "a"
+
+
+def test_unrelated_numerics_in_the_same_unit_are_not_a_conflict(encoders: FakeEncoders) -> None:
+    """Two components can take different amounts of time without disagreeing."""
+    conflicts = internal_conflicts_for(
+        [f"parser needs 10 ms {FILLER}", f"scheduler needs 40 ms {FILLER}"], encoders
+    )
+    assert conflicts == ()
 
 
 # --------------------------------------------------------------------------------------

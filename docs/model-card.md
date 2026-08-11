@@ -113,6 +113,17 @@ Inherited from the encoders and from PRISM's own heuristics:
 - **Scope classification is keyword-based.** Only lifecycle, environment, scale, and
   platform differences can exclude a pair; everything else reaches `UNCERTAIN` at most and
   stays in the denominator.
+- **Scope markers remain heuristic, and the residual false-positive risk is real.** A
+  marker is believed when its phrase appears without a negation within a short window
+  before it. Every occurrence is inspected and one affirmative use is enough, so
+  "not proof of concept before, but proof of concept now" is read as prototype scope. That
+  same rule cannot see further than the window: a marker negated at distance
+  ("we will not ship this; the enterprise rollout is cancelled") still registers, and a
+  marker used to describe someone else's system registers as if it described this one.
+  The failure direction matters — a false marker on both sides of a pair can exclude that
+  pair from the denominator, which removes a real contradiction rather than adding a
+  spurious one. No corpus exists to quantify the rate; treating `SCOPE_DIVERGENT` as a
+  reviewed signal rather than a settled verdict is the only honest reading until one does.
 - **Paraphrase is not agreement.** Two claims saying the same thing score low
   contradiction; that is consistency, not corroboration.
 

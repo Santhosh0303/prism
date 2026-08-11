@@ -199,7 +199,7 @@ class PrismService:
         with timed("inference", request_id):
             ledger = build_ledger(pair_set, sessions)
 
-        internal_conflicts = detect_internal_conflicts(viable)
+        internal_conflicts = detect_internal_conflicts(ledger.internal_pairs)
         retained = retain_distinct_claims(viable, ledger)
 
         confidences = [
