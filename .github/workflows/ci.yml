@@ -60,8 +60,10 @@ jobs:
       - name: Unused dependencies
         run: uv run deptry .
 
-      - name: Test suite
-        run: uv run pytest -q -m "not models and not endurance"
+      - name: Test suite and coverage gate
+        # --cov makes fail_under (pyproject.toml, [tool.coverage.report]) an actual gate.
+        # Without it coverage is measured by whoever remembers to ask, which is nobody.
+        run: uv run pytest -q -m "not models and not endurance" --cov=src/prism --cov-report=term
 
       - name: Documentation relations
         run: uv run python scripts/check_links.py

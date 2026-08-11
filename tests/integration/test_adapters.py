@@ -19,15 +19,61 @@ import pytest
 
 from prism.canonical import canonical_digest, canonical_json
 from prism.cli import EXIT_INVALID_INPUT, EXIT_OK, main
-from prism.contracts import PreflightRequest, PrismMode, PrismStatus
+from prism.contracts import (
+    MeasureRequest,
+    PreflightRequest,
+    PrismMode,
+    PrismStatus,
+    parse_payload,
+)
 from prism.errors import ErrorCode, PrismError
 from prism.mcp_server import build_server
+from prism.measure.models import manifest_present, measurement_disabled
 from prism.service import PrismService
 
 TASK = (
     "Assess the system design: component boundaries, coupling between services, "
     "and the scalability tradeoff of the proposed architecture."
 )
+
+#: One agreeing and one contradicting candidate, so the measurement has something to
+#: score. Held as a plain dict because it has to cross the CLI as a file and the MCP
+#: server as tool arguments, not only as a Python object.
+MEASURE_REQUEST: dict[str, Any] = {
+    "question": "Is the release ready to ship this week?",
+    "candidates": [
+        {
+            "candidate_id": "c1",
+            "source_group_id": "pass-1",
+            "source_label": "architecture",
+            "provenance_status": "DECLARED_UNVERIFIED",
+            "perspective": "architect",
+            "claims": [
+                {
+                    "claim_id": "c1-1",
+                    "text": "The migration path is safe and the rollback plan is tested.",
+                    "confidence": 70,
+                    "evidence_status": "INFERRED",
+                }
+            ],
+        },
+        {
+            "candidate_id": "c2",
+            "source_group_id": "pass-2",
+            "source_label": "security",
+            "provenance_status": "DECLARED_UNVERIFIED",
+            "perspective": "security",
+            "claims": [
+                {
+                    "claim_id": "c2-1",
+                    "text": "The migration path is not safe and the rollback plan is untested.",
+                    "confidence": 70,
+                    "evidence_status": "INFERRED",
+                }
+            ],
+        },
+    ],
+}
 
 
 @pytest.fixture(scope="module")
@@ -184,6 +230,82 @@ async def test_python_cli_and_mcp_produce_identical_preflight_bytes(
     mcp_digest = canonical_digest(await call_tool("prism.preflight", {"task": TASK, "mode": mode}))
 
     assert python_digest == cli_digest == mcp_digest
+
+
+@pytest.mark.anyio
+async def test_python_cli_and_mcp_produce_identical_health_bytes(
+    service: PrismService, capsys: pytest.CaptureFixture[str]
+) -> None:
+    python_digest = canonical_digest(service.health(deep=False))
+
+    _, cli_out = run_cli(["health"], capsys)
+    cli_digest = canonical_digest(json.loads(cli_out))
+
+    mcp_digest = canonical_digest(await call_tool("prism.health", {"deep": False}))
+
+    assert python_digest == cli_digest == mcp_digest
+
+
+@pytest.mark.anyio
+async def test_python_cli_and_mcp_produce_identical_synthesis_bytes(
+    service: PrismService, capsys: pytest.CaptureFixture[str], tmp_path: Any
+) -> None:
+    """Synthesis carries a real preflight report, not the empty contract: the empty case
+    would agree across adapters even if report handling differed."""
+    preflight = service.preflight(PreflightRequest(task=TASK))
+    payload = json.loads(canonical_json(preflight))
+    preflight_file = tmp_path / "preflight.json"
+    preflight_file.write_text(canonical_json(preflight), encoding="utf-8")
+
+    python_digest = canonical_digest(service.synthesis_contract(preflight, None))
+
+    _, cli_out = run_cli(["synthesize", "--preflight", str(preflight_file)], capsys)
+    cli_digest = canonical_digest(json.loads(cli_out))
+
+    mcp_digest = canonical_digest(
+        await call_tool("prism.synthesis_contract", {"preflight": payload})
+    )
+
+    assert python_digest == cli_digest == mcp_digest
+
+
+@pytest.mark.anyio
+@pytest.mark.models
+async def test_python_cli_and_mcp_produce_identical_measurement_bytes(
+    service: PrismService, capsys: pytest.CaptureFixture[str], tmp_path: Any
+) -> None:
+    """The surface where divergence would matter most, and the one parity did not cover.
+
+    Also carries the measurement into synthesis, so the synthesis contract is exercised
+    with both of its inputs rather than with a preflight report alone.
+    """
+    if measurement_disabled() or not manifest_present():
+        pytest.skip("no verified model bundle on this runner")
+
+    report = service.measure(parse_payload(MeasureRequest, MEASURE_REQUEST))
+    python_digest = canonical_digest(report)
+
+    request_file = tmp_path / "request.json"
+    request_file.write_text(json.dumps(MEASURE_REQUEST), encoding="utf-8")
+    _, cli_out = run_cli(["measure", "--input", str(request_file)], capsys)
+    cli_digest = canonical_digest(json.loads(cli_out))
+
+    mcp_digest = canonical_digest(await call_tool("prism.measure", {"request": MEASURE_REQUEST}))
+
+    assert python_digest == cli_digest == mcp_digest
+
+    # ...and the same report, through synthesis, on all three surfaces.
+    measurement_payload = json.loads(canonical_json(report))
+    measurement_file = tmp_path / "measurement.json"
+    measurement_file.write_text(canonical_json(report), encoding="utf-8")
+
+    python_contract = canonical_digest(service.synthesis_contract(None, report))
+    _, cli_out = run_cli(["synthesize", "--measurement", str(measurement_file)], capsys)
+    mcp_contract = canonical_digest(
+        await call_tool("prism.synthesis_contract", {"measurement": measurement_payload})
+    )
+
+    assert python_contract == canonical_digest(json.loads(cli_out)) == mcp_contract
 
 
 def test_repeated_python_calls_are_byte_identical(service: PrismService) -> None:

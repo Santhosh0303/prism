@@ -93,7 +93,13 @@ ignore = [
 # The determinism matrix must spawn fresh interpreters: a digest that is stable within
 # one process proves nothing about hash seeding or locale. Fixed argv, no shell, no
 # caller-supplied input.
-"tests/regression/test_canonical_digest_matrix.py" = ["S603"]
+"tests/regression/test_canonical_digest_matrix.py" = [
+    "S603",
+    # RUF001/RUF003 flag the dotless i as a homoglyph of "i". Here it is the fixture:
+    # the Turkish casefolding trap cannot be exercised with unambiguous characters.
+    "RUF001",
+    "RUF003",
+]
 
 
 
@@ -144,6 +150,12 @@ source = ["src/prism"]
 [tool.coverage.report]
 show_missing = true
 exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]
+# Measured 85% on 2026-08-12 over the CI selection (-m "not models and not endurance").
+# Set below that, not at it: the model-dependent paths are deselected in CI and a few
+# branches are reachable on only one platform, so a threshold pinned to the local number
+# would fail on a runner for reasons unrelated to the change under test. Raise it when a
+# measured floor justifies the raise; do not lower it to make a red run green.
+fail_under = 83
 
 [tool.vulture]
 min_confidence = 90
