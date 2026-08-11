@@ -12,9 +12,11 @@ Three behaviours live here because they must hold for every caller:
 * **Complete-result atomicity.** A report is fully assembled and validated before it is
   returned. A timeout or crash cannot produce a partial report with a plausible-looking
   contradiction rate.
-* **Timeout circuit breaking.** A Python-side timeout does not stop native inference. The
-  worker may still be running, so new measurements are refused until it finishes rather
-  than piling a second job on top of an unhealthy one.
+* **Timeout circuit breaking.** A Python-side timeout does not stop native inference, so
+  the worker that timed out keeps its permit until it is observed to finish. One timeout
+  costs one unit of capacity, not all of it: a single hung worker must not become a full
+  outage. Only when *every* worker is abandoned is the refusal escalated from ``BUSY`` to
+  a typed ``TIMEOUT``.
 """
 
 from __future__ import annotations
@@ -72,8 +74,9 @@ class PrismService:
         self._executor = ThreadPoolExecutor(
             max_workers=MAX_CONCURRENT_MEASUREMENTS, thread_name_prefix="prism-measure"
         )
-        #: Set when a measurement timed out. Native inference may still be occupying a
-        #: worker, so further measurements are refused until it is observed to finish.
+        #: Futures whose caller has already been told TIMEOUT. Native inference may still
+        #: be occupying the worker, so each one's permit stays withheld until it is
+        #: observed to finish — capacity falls by one per abandoned worker.
         self._abandoned: set[Future[MeasureReport]] = set()
         self._breaker_lock = threading.Lock()
 
@@ -153,6 +156,17 @@ class PrismService:
         self._permits.release()
 
     def _check_circuit(self) -> None:
+        """Refuse outright only when every worker is abandoned.
+
+        Below that ceiling the withheld permits are the entire mechanism: capacity is
+        already reduced, a further measurement is admissible on what remains, and
+        refusing it would turn one hung worker into a full outage.
+
+        At the ceiling the semaphore would refuse anyway — what this adds is the code.
+        ``BUSY`` tells the caller to retry when a measurement completes, which is
+        misleading advice when no worker is going to return; ``TIMEOUT`` names the real
+        state and points at a restart.
+        """
         with self._breaker_lock:
             abandoned = len(self._abandoned)
         if abandoned >= MAX_CONCURRENT_MEASUREMENTS:

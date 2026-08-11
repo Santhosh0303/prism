@@ -27,6 +27,42 @@ SECURITY_TASK = (
     "check authentication and the injection vulnerability we suspect."
 )
 
+TASKS: dict[str, str] = {"architecture": ARCHITECTURE_TASK, "security": SECURITY_TASK}
+
+#: The registry the digests below were reviewed against. Pinned separately so that
+#: "someone edited the registry" fails as its own named case rather than as six
+#: simultaneous digest mismatches with no stated cause.
+GOLDEN_REGISTRY_VERSION = "1.0.0"
+GOLDEN_REGISTRY_HASH = "sha256:6aab424d376b0f2c60376b96110681c804fa11f22c85fba52b6906eff220aaf1"
+
+#: Reviewed once, 2026-08-12, against registry 1.0.0. Confirmed identical under
+#: ``PYTHONHASHSEED`` 0, 1, 42 and 12345 and across separate processes.
+#:
+#: If one of these fails, the contract PRISM hands hosts has changed. The fix is a
+#: reviewed registry version bump, not a refreshed constant — regenerating the value to
+#: make the test green removes the only thing standing between a silent semantic change
+#: and a release.
+GOLDEN_CONTRACT_DIGESTS: dict[tuple[str, PrismMode], str] = {
+    ("architecture", PrismMode.LITE): (
+        "sha256:be33d4356910e8b83a6a8102d25eba62aa575458171e4cf882f5a05632bee13b"
+    ),
+    ("architecture", PrismMode.STANDARD): (
+        "sha256:6c0b12599d611396e9bca04b3fab32a5bae5aaae627232ed95d53d728e1a1fc6"
+    ),
+    ("architecture", PrismMode.CRITICAL): (
+        "sha256:52d159ec4553c581820e9e082e08df3e18465ec113adfe86c3cc8cb3531fab95"
+    ),
+    ("security", PrismMode.LITE): (
+        "sha256:6c5c7cf3d46489b4a24450588f9a5949363a7ac5a73a1fa44e87b34b5f128abc"
+    ),
+    ("security", PrismMode.STANDARD): (
+        "sha256:5facb3f084d00758a32a8d98e1826cbc20228f51b356fe8de0883b4b5e4e6715"
+    ),
+    ("security", PrismMode.CRITICAL): (
+        "sha256:72c1ef5b3f67caf592d9b0de6a54d913eee96833cc6cb3c6a017464a5815ede9"
+    ),
+}
+
 
 @pytest.fixture(scope="module")
 def registry() -> PerspectiveRegistry:
@@ -37,6 +73,26 @@ def build(registry: PerspectiveRegistry, task: str, mode: PrismMode) -> str:
     return canonical_digest(
         build_preflight_contract(PreflightRequest(task=task, mode=mode), registry)
     )
+
+
+# --------------------------------------------------------------------------------------
+# pinned golden digests
+# --------------------------------------------------------------------------------------
+
+
+def test_the_reviewed_registry_is_the_one_on_disk(registry: PerspectiveRegistry) -> None:
+    """The digests below describe registry 1.0.0 and nothing else."""
+    assert (registry.version, registry.content_hash) == (
+        GOLDEN_REGISTRY_VERSION,
+        GOLDEN_REGISTRY_HASH,
+    ), "registry changed — the golden digests need a reviewed version bump, not a refresh"
+
+
+@pytest.mark.parametrize(("task_name", "mode"), list(GOLDEN_CONTRACT_DIGESTS))
+def test_contract_digest_matches_the_pinned_golden(
+    registry: PerspectiveRegistry, task_name: str, mode: PrismMode
+) -> None:
+    assert build(registry, TASKS[task_name], mode) == GOLDEN_CONTRACT_DIGESTS[(task_name, mode)]
 
 
 # --------------------------------------------------------------------------------------

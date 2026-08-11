@@ -84,6 +84,29 @@ class SlowService(PrismService):
                 self.active -= 1
 
 
+class FirstCallBlocksService(PrismService):
+    """One worker hangs indefinitely; every later measurement returns immediately.
+
+    Needed to tell "capacity reduced by one" apart from "service refuses everything",
+    which a uniformly slow stub cannot distinguish.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(registry=PerspectiveRegistry.load())
+        self.release = threading.Event()
+        self._calls = 0
+        self._call_lock = threading.Lock()
+
+    def _measure_inner(self, request: MeasureRequest, request_id: str) -> Any:
+        with self._call_lock:
+            self._calls += 1
+            is_first = self._calls == 1
+        if is_first:
+            # Bounded so a failing assertion cannot leave the worker hanging forever.
+            self.release.wait(timeout=30.0)
+        return self._insufficient_report((), (), (), request_id)
+
+
 # --------------------------------------------------------------------------------------
 # burst admission
 # --------------------------------------------------------------------------------------
@@ -169,6 +192,42 @@ def test_repeated_timeouts_trip_the_circuit_rather_than_stacking_work() -> None:
             codes.append(error.code)
     assert codes[-1] is ErrorCode.TIMEOUT
     assert service.peak_active <= MAX_CONCURRENT_MEASUREMENTS
+
+
+@pytest.mark.stress
+def test_one_abandoned_worker_costs_one_permit_not_the_whole_service() -> None:
+    """The discriminating case for the breaker.
+
+    A reading of "measurements are refused after a timeout" would have this second call
+    refused. It must not be: the abandoned worker's withheld permit already removed the
+    capacity it is occupying, and refusing the rest would turn one hung worker into a
+    full outage.
+    """
+    service = FirstCallBlocksService()
+    try:
+        with pytest.raises(PrismError) as excinfo:
+            service.measure(request_for(timeout=0.1))
+        assert excinfo.value.code is ErrorCode.TIMEOUT
+
+        report = service.measure(request_for(timeout=5.0))
+        assert report.status is PrismStatus.INSUFFICIENT
+    finally:
+        service.release.set()
+
+
+@pytest.mark.stress
+def test_a_fully_abandoned_service_refuses_with_timeout_not_busy() -> None:
+    """BUSY says "retry when a measurement completes". With every worker abandoned
+    nothing is going to complete, so the refusal has to name the real state instead."""
+    service = SlowService(hold_seconds=3.0)
+    for _ in range(MAX_CONCURRENT_MEASUREMENTS):
+        with pytest.raises(PrismError):
+            service.measure(request_for(timeout=0.1))
+
+    with pytest.raises(PrismError) as excinfo:
+        service.measure(request_for(timeout=0.1))
+    assert excinfo.value.code is ErrorCode.TIMEOUT
+    assert excinfo.value.diagnostics["abandoned_workers"] == MAX_CONCURRENT_MEASUREMENTS
 
 
 # --------------------------------------------------------------------------------------
