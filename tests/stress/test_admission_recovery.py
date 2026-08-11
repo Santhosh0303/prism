@@ -76,7 +76,9 @@ class SlowService(PrismService):
             self.peak_active = max(self.peak_active, self.active)
         try:
             time.sleep(self.hold_seconds)
-            return self._insufficient_report(request, (), (), request_id)
+            # Empty effective set: this stub never reaches normalisation, and admission
+            # is what is under test, not the report body.
+            return self._insufficient_report((), (), (), request_id)
         finally:
             with self._counter_lock:
                 self.active -= 1

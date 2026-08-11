@@ -21,8 +21,9 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
+from collections.abc import Sequence
 from enum import StrEnum
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, NamedTuple, Self
 
 from pydantic import (
     BaseModel,
@@ -383,13 +384,57 @@ class MeasureRequest(_Strict):
         return self
 
     def distinct_source_count(self) -> int:
-        """Count canonical source groups. Labels are deliberately not consulted."""
+        """Count canonical source groups *as submitted*. Labels are not consulted.
+
+        This describes the request, not the report. A report must use
+        :func:`aggregate_effective_sources` over the candidates that actually scored,
+        because duplicates and non-viable candidates never reach the measured set.
+        """
         return len({candidate.source_group_id for candidate in self.candidates})
 
     def source_diversity(self) -> SourceDiversity:
+        """Diversity *as submitted*. See :meth:`distinct_source_count` — not for reports."""
         if self.distinct_source_count() > 1:
             return SourceDiversity.MULTI_SOURCE
         return SourceDiversity.SINGLE_SOURCE
+
+
+class EffectiveSources(NamedTuple):
+    """What a report may claim about its sources, derived from what actually scored."""
+
+    sources_distinct: int
+    source_diversity: SourceDiversity
+    provenance_status: ProvenanceStatus
+
+
+#: Weakest first. The aggregate reports the first status present in the effective set.
+_PROVENANCE_WEAKEST_FIRST = (
+    ProvenanceStatus.DECLARED_UNVERIFIED,
+    ProvenanceStatus.EXTERNALLY_ATTESTED,
+)
+
+
+def aggregate_effective_sources(candidates: Sequence[CandidatePacket]) -> EffectiveSources:
+    """Aggregate the effective candidate set: duplicates and non-viable ones removed.
+
+    Two copies of one source cannot raise diversity, because the duplicate is gone before
+    this is called. ``EXTERNALLY_ATTESTED`` holds only when *every* effective candidate is
+    attested; any weaker status present degrades the whole report, so one attested
+    candidate cannot launder four unattested ones. An empty set is
+    ``DECLARED_UNVERIFIED``: nothing scored, so nothing was attested.
+    """
+    distinct = len({candidate.source_group_id for candidate in candidates})
+    present = {candidate.provenance_status for candidate in candidates}
+    return EffectiveSources(
+        sources_distinct=distinct,
+        source_diversity=(
+            SourceDiversity.MULTI_SOURCE if distinct > 1 else SourceDiversity.SINGLE_SOURCE
+        ),
+        provenance_status=next(
+            (status for status in _PROVENANCE_WEAKEST_FIRST if status in present),
+            ProvenanceStatus.DECLARED_UNVERIFIED,
+        ),
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -519,7 +564,11 @@ class MeasureReport(_Strict):
     #: Exploratory until separately validated.
     overconfidence_gap: float | None = None
 
-    sources_distinct: int = Field(ge=1)
+    #: Distinct source groups among the candidates that actually scored, not among those
+    #: submitted. Zero is legal and reachable: every candidate can be dropped as a
+    #: duplicate or as non-viable, and a report that measured nothing must not claim a
+    #: source it did not use.
+    sources_distinct: int = Field(ge=0)
     pair_ledger_digest: Digest
     report_bytes: int | None = Field(default=None, ge=0)
     diagnostics: dict[str, str | int | float | bool | None] = Field(default_factory=dict)

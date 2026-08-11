@@ -27,6 +27,7 @@ from pathlib import Path
 from .canonical import canonical_digest
 from .constants import CALIBRATION_UNCALIBRATED
 from .contracts import (
+    CandidatePacket,
     ComponentHealth,
     DuplicateRecord,
     HealthReport,
@@ -37,6 +38,7 @@ from .contracts import (
     PreflightRequest,
     PrismStatus,
     SynthesisContract,
+    aggregate_effective_sources,
 )
 from .errors import ErrorCode, PrismError
 from .limits import MAX_CONCURRENT_MEASUREMENTS
@@ -181,8 +183,14 @@ class PrismService:
         scored = tuple(c for c in normalized if c.candidate_id not in duplicate_ids)
 
         viable = tuple(c for c in scored if c.is_viable)
+        # Everything the report says about its sources is derived from these packets, not
+        # from the request: a duplicate that was removed is not a second opinion, and a
+        # candidate with no usable claim contributed nothing to measure.
+        submitted = {packet.candidate_id: packet for packet in request.candidates}
+        effective = tuple(submitted[c.candidate_id] for c in viable)
+
         if len(viable) < 2:
-            return self._insufficient_report(request, duplicates, tuple(warnings), request_id)
+            return self._insufficient_report(effective, duplicates, tuple(warnings), request_id)
 
         sessions = ModelSessions.get(self._model_root)
 
@@ -205,7 +213,7 @@ class PrismService:
         status = (
             PrismStatus.INSUFFICIENT if ledger.contradiction_denominator == 0 else PrismStatus.OK
         )
-        source_diversity = request.source_diversity()
+        sources = aggregate_effective_sources(effective)
 
         agreement = agreement_type(
             status=status,
@@ -213,15 +221,15 @@ class PrismService:
             contradiction_count=ledger.contradiction_count,
             nli_coverage=ledger.nli_coverage,
             scope_uncertain_count=ledger.scope_uncertain_count,
-            source_diversity=source_diversity,
+            source_diversity=sources.source_diversity,
         )
 
         report = build_measure_report(
             ledger=ledger,
             status=status,
-            source_diversity=source_diversity,
-            provenance_status=request.candidates[0].provenance_status,
-            sources_distinct=request.distinct_source_count(),
+            source_diversity=sources.source_diversity,
+            provenance_status=sources.provenance_status,
+            sources_distinct=sources.sources_distinct,
             agreement=agreement,
             retained=retained,
             internal_conflicts=internal_conflicts,
@@ -251,17 +259,23 @@ class PrismService:
 
     def _insufficient_report(
         self,
-        request: MeasureRequest,
+        effective: tuple[CandidatePacket, ...],
         duplicates: tuple[DuplicateRecord, ...],
         warnings: tuple[NormalizationWarning, ...],
         request_id: str,
     ) -> MeasureReport:
-        """Fewer than two viable candidates. No measurement, and no implied agreement."""
+        """Fewer than two viable candidates. No measurement, and no implied agreement.
+
+        ``effective`` holds the candidates that survived dedupe and viability — zero or
+        one of them here. The same aggregation as the measured path applies, so an
+        unmeasured report cannot claim diversity or attestation the measured one would not.
+        """
+        sources = aggregate_effective_sources(effective)
         return MeasureReport(
             status=PrismStatus.INSUFFICIENT,
             calibration_status=calibration_status(),
-            source_diversity=request.source_diversity(),
-            provenance_status=request.candidates[0].provenance_status,
+            source_diversity=sources.source_diversity,
+            provenance_status=sources.provenance_status,
             pairs_total=0,
             relevant_pairs=0,
             scope_divergent_count=0,
@@ -275,7 +289,7 @@ class PrismService:
             duplicate_candidates=duplicates,
             normalization_warnings=warnings[:20],
             normalization_warnings_omitted_count=max(0, len(warnings) - 20),
-            sources_distinct=request.distinct_source_count(),
+            sources_distinct=sources.sources_distinct,
             pair_ledger_digest=canonical_digest([]),
             diagnostics={"request_id": request_id, "reason": "fewer_than_two_viable_candidates"},
         )

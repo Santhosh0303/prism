@@ -22,6 +22,7 @@ from prism.contracts import (
     PrismStatus,
     ProvenanceStatus,
     SourceDiversity,
+    aggregate_effective_sources,
 )
 
 # --------------------------------------------------------------------------------------
@@ -47,12 +48,13 @@ def packet(
     source_group_id: str = "host-pass-001",
     source_label: str | None = "claude-code",
     claims: tuple[Claim, ...] | None = None,
+    provenance: ProvenanceStatus = ProvenanceStatus.DECLARED_UNVERIFIED,
 ) -> CandidatePacket:
     return CandidatePacket(
         candidate_id=candidate_id,
         source_group_id=source_group_id,
         source_label=source_label,
-        provenance_status=ProvenanceStatus.DECLARED_UNVERIFIED,
+        provenance_status=provenance,
         perspective=candidate_id,
         claims=claims if claims is not None else (claim(),),
     )
@@ -203,6 +205,61 @@ def test_distinct_source_groups_are_multi_source() -> None:
     request = MeasureRequest(question="Review this.", candidates=candidates)
     assert request.source_diversity() is SourceDiversity.MULTI_SOURCE
     assert request.distinct_source_count() == 2
+
+
+# --------------------------------------------------------------------------------------
+# effective-source aggregation: what a report may claim, over what actually scored
+# --------------------------------------------------------------------------------------
+
+
+def test_effective_aggregate_counts_only_the_groups_it_is_given() -> None:
+    """The caller passes the surviving candidates; the aggregate never sees the request."""
+    aggregate = aggregate_effective_sources(
+        (
+            packet(candidate_id="a", source_group_id="host-pass-001"),
+            packet(candidate_id="c", source_group_id="host-pass-001"),
+        )
+    )
+    assert aggregate.sources_distinct == 1
+    assert aggregate.source_diversity is SourceDiversity.SINGLE_SOURCE
+
+
+def test_effective_aggregate_reports_multi_source_for_two_groups() -> None:
+    aggregate = aggregate_effective_sources(
+        (
+            packet(candidate_id="a", source_group_id="host-pass-001"),
+            packet(candidate_id="b", source_group_id="host-pass-002"),
+        )
+    )
+    assert aggregate.sources_distinct == 2
+    assert aggregate.source_diversity is SourceDiversity.MULTI_SOURCE
+
+
+def test_attestation_requires_every_effective_candidate() -> None:
+    """One attested candidate must not launder an unattested one into the report."""
+    mixed = aggregate_effective_sources(
+        (
+            packet(candidate_id="a", provenance=ProvenanceStatus.EXTERNALLY_ATTESTED),
+            packet(candidate_id="b", provenance=ProvenanceStatus.DECLARED_UNVERIFIED),
+        )
+    )
+    assert mixed.provenance_status is ProvenanceStatus.DECLARED_UNVERIFIED
+
+    every = aggregate_effective_sources(
+        (
+            packet(candidate_id="a", provenance=ProvenanceStatus.EXTERNALLY_ATTESTED),
+            packet(candidate_id="b", provenance=ProvenanceStatus.EXTERNALLY_ATTESTED),
+        )
+    )
+    assert every.provenance_status is ProvenanceStatus.EXTERNALLY_ATTESTED
+
+
+def test_an_empty_effective_set_is_not_vacuously_attested() -> None:
+    """Nothing scored, so nothing was attested. ``all()`` over an empty set would lie."""
+    aggregate = aggregate_effective_sources(())
+    assert aggregate.provenance_status is ProvenanceStatus.DECLARED_UNVERIFIED
+    assert aggregate.source_diversity is SourceDiversity.SINGLE_SOURCE
+    assert aggregate.sources_distinct == 0
 
 
 # --------------------------------------------------------------------------------------
