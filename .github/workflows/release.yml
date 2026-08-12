@@ -29,7 +29,7 @@ jobs:
   gate:
     name: Release gate
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
@@ -55,10 +55,48 @@ jobs:
             exit 1
           fi
 
+      - name: Restore the pinned model bundle
+        id: bundle
+        # release_gate.py runs G1 as a bare pytest, so it inherits only the `not endurance`
+        # marker from addopts and the model-dependent tests execute. That is correct for a
+        # release gate -- it should be the strongest check in the repository, not a subset --
+        # but it means this job needs the bundle that ci.yml's gates job deliberately skips.
+        # Without it the gate fails on four missing-artifact errors, which is what the first
+        # run of this workflow did, at tag v0.1.0.
+        uses: actions/cache@v6
+        with:
+          path: models/artifacts
+          key: model-bundle-${{ hashFiles('models/artifacts/manifest.json') }}
+
+      - name: Acquire the bundle
+        if: steps.bundle.outputs.cache-hit != 'true'
+        # Same fetch, retries and fail-closed reasoning as ci.yml's model-dependent job. A
+        # tag ref will usually miss a cache written on main, so expect the download on most
+        # releases; 403 MB is a reasonable price for a release gate that actually ran.
+        run: |
+          for attempt in 1 2 3; do
+            if uv run python scripts/acquire_models.py; then
+              exit 0
+            fi
+            echo "::warning::model acquisition attempt ${attempt} failed"
+            sleep $((attempt * 20))
+          done
+          echo "::error::model acquisition failed three times; upstream is unreachable or the pinned bytes have changed"
+          exit 1
+
+      - name: Verify the bundle against the committed manifest
+        # Runs on a cache hit too: restored bytes are bytes from some earlier job, and the
+        # manifest is the only thing that decides whether they are the right ones.
+        run: uv run python scripts/verify_models.py
+
       - name: Run every blocking check
         # Not --strict: the seed corpus does not exist and the baseline is unsigned, so
         # --strict fails by design on this build. The full report is published either way,
         # and the SKIP entries are the honest record of what could not be checked.
+        #
+        # G7/G25 still SKIPs here because no benchmark artifact is produced on a runner, and
+        # a latency figure measured on shared CI hardware would be worse than none. G8 now
+        # runs its measured branch, because the bundle above exists.
         run: uv run python scripts/release_gate.py --text
 
       - name: Machine-readable gate report
