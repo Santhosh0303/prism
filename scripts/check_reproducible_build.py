@@ -24,8 +24,10 @@ therefore also records what it built, and can be pointed at a record made elsewh
     uv run python scripts/check_reproducible_build.py --compare-with ci-build-digest.json
 
 `--digest-out` is what the CI job writes; `--compare-with` is what a maintainer runs against
-the downloaded CI record. The record carries the commit it was built from, so a comparison
-across two machines is a comparison of the same source rather than of two moments.
+the downloaded CI record. The comparison is keyed on the git *tree*, not the commit: a
+`pull_request` run builds the merge of the branch into its base, so its commit exists on no
+branch, while its tree is identical to the branch tip's whenever the base has not moved. Two
+records that name one tree are two machines building one source.
 """
 
 from __future__ import annotations
@@ -72,15 +74,10 @@ def _build_into(destination: Path) -> tuple[Path, ...]:
     return tuple(sorted(destination.glob("*.whl")))
 
 
-def _source_revision() -> str:
-    """The commit the artifact was built from, so two records can be shown to describe one
-    source. `GITHUB_SHA` first: on a runner it is the checked-out commit by definition."""
-    revision = os.environ.get("GITHUB_SHA")
-    if revision:
-        return revision
+def _git(*arguments: str) -> str:
     try:
-        completed = subprocess.run(
-            ["git", "rev-parse", "HEAD"],  # noqa: S607 - resolved from PATH
+        completed = subprocess.run(  # noqa: S603 - fixed argv from this module, no shell
+            ["git", *arguments],  # noqa: S607 - resolved from PATH
             cwd=REPO_ROOT,
             capture_output=True,
             check=True,
@@ -92,9 +89,23 @@ def _source_revision() -> str:
     return completed.stdout.strip() or "unknown"
 
 
+def _source_tree() -> str:
+    """The tree the artifact was built from — the identity the comparison is keyed on.
+
+    Not the commit. A `pull_request` run builds the merge of the branch into its base, so
+    `GITHUB_SHA` there names a commit that exists on no branch and matches nothing a
+    maintainer can check out; keying on it would refuse a runner build of exactly this
+    source. Two commits with identical content have identical trees, which is the property
+    that actually decides whether two machines built the same thing.
+    """
+    return _git("rev-parse", "HEAD^{tree}")
+
+
 def _build_record(digests: dict[str, str]) -> dict[str, Any]:
     return {
-        "source_revision": _source_revision(),
+        "source_tree": _source_tree(),
+        # Informational only. On a pull_request run this is the ephemeral merge commit.
+        "source_revision": os.environ.get("GITHUB_SHA") or _git("rev-parse", "HEAD"),
         "platform": platform.platform(),
         "python": platform.python_version(),
         "artifacts": digests,
@@ -108,11 +119,18 @@ def cross_machine_findings(local: dict[str, Any], recorded: dict[str, Any]) -> l
     disagreement here is the finding the same-machine check structurally cannot produce.
     """
     findings: list[str] = []
-    if recorded.get("source_revision") != local.get("source_revision"):
+    recorded_tree = recorded.get("source_tree")
+    if not recorded_tree or recorded_tree == "unknown":
         findings.append(
-            f"the recorded build is of {recorded.get('source_revision', 'an unstated commit')} "
-            f"and this one is of {local.get('source_revision')}: different source, so a "
-            "matching digest would prove nothing and a differing one would explain itself"
+            "the record does not name the source tree it was built from, so it cannot be "
+            "shown to describe this source"
+        )
+        return findings
+    if recorded_tree != local.get("source_tree"):
+        findings.append(
+            f"the recorded build is of tree {recorded_tree} and this one is of "
+            f"{local.get('source_tree')}: different source, so a matching digest would prove "
+            "nothing and a differing one would explain itself"
         )
         return findings
 

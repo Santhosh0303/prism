@@ -200,9 +200,12 @@ gh run download <run-id> --name build-digest
 uv run python scripts/check_reproducible_build.py --compare-with build-digest.json
 ```
 
-The record carries the commit it was built from and the comparison refuses to proceed when
-the two do not match, so a matching digest is evidence about one source rather than about
-two moments.
+The comparison is keyed on the git tree rather than the commit, and refuses to proceed when
+the two records name different trees. A `pull_request` run builds the merge of the branch
+into its base: that commit exists on no branch and matches nothing a maintainer can check
+out, while its tree is the branch tip's whenever the base has not moved. Keying on the
+commit would have refused a runner build of exactly this source — it did, on the first
+attempt, which is why the check is on the tree.
 
 ## Baseline
 
