@@ -210,6 +210,9 @@ def run(digest_out: Path | None = None, compare_with: Path | None = None) -> Gat
                 "path": str(compare_with),
                 "platform": recorded.get("platform"),
                 "python": recorded.get("python"),
+                # The identity the comparison is keyed on, printed next to the verdict so a
+                # PASS states which source it is a claim about.
+                "source_tree": recorded.get("source_tree"),
                 "source_revision": recorded.get("source_revision"),
             }
             findings.extend(cross_machine_findings(record, recorded))

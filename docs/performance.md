@@ -187,7 +187,7 @@ final window been contaminated, the verdict would be `INCONCLUSIVE`; a resource 
 measured on a loaded machine is a reading of the machine, which this project has already
 published once and does not intend to repeat.
 
-## Cross-machine build reproducibility
+## Measured — cross-machine build reproducibility
 
 `scripts/check_reproducible_build.py` builds twice and compares normalised wheel content.
 Two builds on one machine share a filesystem, a clock and a `uv`, so they are held constant
@@ -206,6 +206,21 @@ into its base: that commit exists on no branch and matches nothing a maintainer 
 out, while its tree is the branch tip's whenever the base has not moved. Keying on the
 commit would have refused a runner build of exactly this source — it did, on the first
 attempt, which is why the check is on the tree.
+
+Measured, for tree `ade6f985e610cfbd09e67fc3d99d1c9b7fd99519`:
+
+| | Local | CI runner |
+|---|---|---|
+| Platform | Windows 11 (10.0.26200) | Linux 6.17 (azure), glibc 2.39 |
+| Python | 3.12.10 | 3.12.3 |
+| `prism_preflight-0.1.0-py3-none-any.whl` | `sha256:a93b47bb…8790` | `sha256:a93b47bb…8790` |
+
+`verdict: PASS`, no findings: two operating systems, two Python patch releases, one wheel.
+That is the claim two builds in one temporary directory cannot support.
+
+What it does not cover: the wheel holds `src/prism` and its metadata, so this says nothing
+about the model bundle, the lock resolution on a third platform, or any artifact that is not
+built here. It is one comparison against one runner, not a reproducibility guarantee.
 
 ## Baseline
 
