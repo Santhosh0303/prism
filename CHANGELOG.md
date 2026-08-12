@@ -43,6 +43,15 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
   record was never opened, is not evidence. Windows whose preflight p95 exceeds 1.5× the
   median across windows are discarded rather than believed — preflight loads no model, so a
   moving preflight p95 means the machine moved and not the code.
+- The release pipeline, end to end but **unexercised**. `release.yml` now refuses a tag whose
+  name disagrees with the declared version, attests the wheel and sdist with
+  `actions/attest-build-provenance`, publishes over OIDC trusted publishing with PEP 740
+  attestations, and then reads the provenance back in a `verify` job that fails when it is
+  missing — including when no distribution was produced at all, since a loop over no files
+  otherwise reports success. It holds no API token and none should be added.
+  **None of this has run.** Publishing requires a pending publisher on the index naming this
+  repository and workflow, which does not exist, so signing, provenance and trusted publishing
+  remain `PENDING_EXTERNAL_VALIDATION`. A wired workflow is not a released artifact.
 - A cross-machine build comparison. `check_reproducible_build.py --compare-with` holds a local
   build against the record the CI `reproducible-build` job now uploads, keyed on the git tree
   rather than the commit — a `pull_request` run builds a merge commit that exists on no branch
