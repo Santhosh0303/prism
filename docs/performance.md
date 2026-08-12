@@ -196,7 +196,7 @@ which this project has already published once and does not intend to repeat. Wha
 cannot catch is load present for the whole run, which moves it too; that is why the absolute
 per-window figures are recorded and not only the ratios.
 
-## Cross-machine build reproducibility
+## Measured — cross-machine build reproducibility
 
 `scripts/check_reproducible_build.py` builds twice and compares normalised wheel content.
 Two builds on one machine share a filesystem, a clock and a `uv`, so they are held constant
@@ -221,6 +221,20 @@ dirty tree is refused: `uv build` builds the working tree while the tree hash na
 committed, so with uncommitted changes the record would name a source the wheel did not come
 from — and two such records could agree on a tree while their wheels came from different
 code, which is the one claim this comparison exists to make.
+
+Measured for tree `a7c56f291aa4cacdd5b295185c39256ed7e58d14`, both working trees clean:
+
+| | Local | CI runner |
+|---|---|---|
+| Platform | Windows 11 (10.0.26200) | Linux 6.17 (azure), glibc 2.39 |
+| Python | 3.12.10 | 3.12.3 |
+| `prism_preflight-0.1.0-py3-none-any.whl` | `sha256:bbcb6a0b…a4bb` | `sha256:bbcb6a0b…a4bb` |
+
+`verdict: PASS`, no findings: two operating systems, two Python patch releases, one wheel.
+That is the claim two builds in one temporary directory cannot support. The commit carrying
+this paragraph necessarily postdates the tree it describes — recording a result changes the
+tree, and the wheel embeds the README — so the tree named above is the one that was built,
+not the one you are reading. CI re-runs the same comparison on every commit after it.
 
 What it does not cover: the wheel holds `src/prism` and its metadata, so this says nothing
 about the model bundle, the lock resolution on a third platform, or any artifact that is not
