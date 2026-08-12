@@ -56,9 +56,16 @@ Six steps, in order. Each is verifiable; none requires trusting that a previous 
    stateless, so nothing is lost.
 2. **Pin the previous release.** Install the last known-good version explicitly. Never a
    mutable tag and never a range — an incident is not the moment to let a resolver choose.
-3. **Verify the artifact you rolled back to.** Check the hash and, once release signing
-   exists, the signature and its transparency-log entry. A rollback to an unverified
-   artifact is a second incident.
+3. **Verify the artifact you rolled back to.** A rollback to an unverified artifact is a
+   second incident. Releases from 0.1.0 onward carry provenance, so check it rather than
+   trusting the version string:
+
+   ```bash
+   gh attestation verify prism_preflight-<version>-py3-none-any.whl --repo Santhosh0303/prism
+   ```
+
+   A non-zero exit means the bytes in front of you were not produced by this repository's
+   release workflow. Treat that as the incident, not as a tooling problem.
 4. **Clear and re-verify the model bundle.** Remove the artifact directory, restore the
    pinned revisions from `docs/model-card.md`, and run:
 
@@ -139,13 +146,32 @@ wish, and drifts into looking like a plan.
 
 | Control | State | Why it is not closed | Next executable action |
 |---|---|---|---|
-| Artifact signing, SLSA provenance, transparency log | `PENDING_EXTERNAL_VALIDATION` | The identity now exists and the pipeline is wired, but **neither has ever been exercised**. `release.yml` attests both artifacts, publishes with PEP 740 attestations, and fails a `verify` job when the provenance is absent; a PyPI pending publisher for `prism-preflight` trusts `Santhosh0303/prism`, workflow `release.yml`, environment `pypi`, registered 2026-08-13. Nothing has been published, so no attestation exists to check, and two things that have never been run together are not a working release path. | Merge the pull request that carries this `release.yml` — the copy on `main` has no publish job. Then push one `v*` tag, approve the `pypi` deployment, and read the `verify` job's output. That run is what closes this row. |
-| Trusted publishing | `PENDING_EXTERNAL_VALIDATION` | `release.yml` requests an OIDC token and calls `pypa/gh-action-pypi-publish` with `attestations: true`, holding no API token, and PyPI now has a publisher configured to trust exactly that repository, workflow and environment. The exchange has never actually been attempted, and a credential path is not proven by both ends being configured to expect each other. | Same as above; it is the same gate and should not be counted twice. |
 | Compatibility matrix against pinned prior host releases | `PENDING_EXTERNAL_VALIDATION` | The host versions to pin have not been chosen, and a matrix against "latest" re-measures a moving target and reports it as compatibility. | Pin explicit versions of the MCP hosts PRISM claims to support, add them to the `determinism` matrix in `ci.yml`, and record the measured pass per pinned version. |
-| Signed regression baseline | `UNSIGNED`, recorded | Depends on the release identity above. The committed baseline is a measurement, not attested evidence, and `check_regression_baseline.py --require-signature` fails on it on purpose. | Sign the baseline with the release identity once it exists. |
+| Signed regression baseline | `UNSIGNED`, recorded | No longer blocked, merely not done. The release identity it was waiting on now exists, but the committed baseline is still a measurement rather than attested evidence, and `check_regression_baseline.py --require-signature` fails on it on purpose. | Attest the baseline through the same identity that signs the distributions. |
+| Signed upgrade and rollback drills (G17, G20) | `PENDING_EXTERNAL_VALIDATION` | Both need two signed releases to move between, and exactly one exists. Not a missing capability now — a missing second data point. | Repeat after 0.1.1 is released through the same pipeline. |
 | Evaluation corpus, precision/recall/F1 | absent | No corpus of real pre-existing outputs with provenance and independent second-human labels exists. | Harvest and label a corpus; commit the manifest hash before any encoder run; score the sealed set once. |
 
-Two items that used to sit in this list have been executed and moved out. The **endurance
-soak** is measured, and the **cross-machine build comparison** has run: a Windows local build
-and a Linux CI-runner build of one tree produce the same wheel. Both, including what each
-does not cover, are in [`performance.md`](performance.md).
+Four items that used to sit in this list have been executed and moved out, none of them by
+being described more generously.
+
+The **endurance soak** is measured, and the **cross-machine build comparison** has run: a
+Windows local build and a Linux CI-runner build of one tree produce the same normalised wheel
+content. Both, including what each does not cover, are in [`performance.md`](performance.md).
+
+**Artifact signing, SLSA provenance, the transparency log and trusted publishing** closed
+together on 2026-08-13, when `prism-preflight` 0.1.0 was published by
+[run 31649871113](https://github.com/Santhosh0303/prism/actions/runs/31649871113) from tag
+`v0.1.0` at commit `1ca7e7b`. No API token exists or was used; PyPI minted a short-lived
+credential from the workflow's OIDC identity. Both distributions carry a SLSA v1 provenance
+attestation signed through the Public Good Sigstore instance and recorded in Rekor, and PEP
+740 attestations naming publisher `GitHub / Santhosh0303/prism / release.yml / pypi`.
+
+What makes that a verified claim rather than a reported one: the artifacts were downloaded
+back **from the index** and checked on a separate machine with
+`gh attestation verify <artifact> --repo Santhosh0303/prism`, which exited 0 for both — while
+the same wheel checked against an unrelated repository exited 1 with a 404. The negative
+control matters, because a verification command that cannot fail proves nothing.
+
+Three release controls remain open and are in the table above. Signing exists now, so the
+regression baseline is no longer blocked from being attested — merely not attested yet — and
+the two signed-release drills need a second release to move between.
