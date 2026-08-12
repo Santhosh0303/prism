@@ -159,12 +159,15 @@ of 4%. The give-away is in the preflight column. Preflight is pure Python and lo
 so its p95 tripling from 0.110–0.144 ms to 0.306 ms measured the machine, not the code. Any
 worst-case figure published without that check is describing whatever else was running.
 
-No threshold was moved to accommodate any of this. The 8,000 ms budget, the 10-second
-deadline, the 160-pair maximum, and the fixed 2-thread inference settings are all unchanged.
-What the numbers say is that a five-lens measurement whose claims all address one subject
-costs roughly 8.5 seconds and 19 CPU-seconds on an idle machine, against a contract that
-promises an answer or a refusal within ten. The published 3.5-second figure was never wrong;
-it describes 60 pairs of inference, and the legal maximum is 160.
+No threshold was moved to accommodate any of this **at the time these runs were recorded**:
+the 8,000 ms budget, the then-declared 10-second deadline, the 160-pair maximum and the
+fixed 2-thread inference settings were all unchanged. The deadline was raised to 15 s later,
+on 2026-08-12, for the reason set out in "The measurement deadline, and why it moved" below;
+everything else in that list still stands as written. What the numbers say is that a
+five-lens measurement whose claims all address one subject costs roughly 8.5 seconds and
+19 CPU-seconds on an idle machine, against a contract that promised, at the time, an answer
+or a refusal within ten. The published 3.5-second figure was never wrong; it describes
+60 pairs of inference, and the legal maximum is 160.
 
 Memory is the one budget with real headroom: 953 MB against a 2.2 GB target, so the
 2.7× increase in NLI work costs 27% more resident memory. Peak RSS is now a maximum sampled
