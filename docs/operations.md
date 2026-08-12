@@ -145,6 +145,7 @@ wish, and drifts into looking like a plan.
 | Signed regression baseline | `UNSIGNED`, recorded | Depends on the release identity above. The committed baseline is a measurement, not attested evidence, and `check_regression_baseline.py --require-signature` fails on it on purpose. | Sign the baseline with the release identity once it exists. |
 | Evaluation corpus, precision/recall/F1 | absent | No corpus of real pre-existing outputs with provenance and independent second-human labels exists. | Harvest and label a corpus; commit the manifest hash before any encoder run; score the sealed set once. |
 
-One item that used to sit in this list has been executed and moved out: the **endurance
-soak** is measured, and both what it shows and what it cannot settle are in
-[`performance.md`](performance.md).
+Two items that used to sit in this list have been executed and moved out. The **endurance
+soak** is measured, and the **cross-machine build comparison** has run: a Windows local build
+and a Linux CI-runner build of one tree produce the same wheel. Both, including what each
+does not cover, are in [`performance.md`](performance.md).
