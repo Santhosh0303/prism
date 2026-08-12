@@ -190,4 +190,17 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Two clean builds, compared
-        run: uv run python scripts/check_reproducible_build.py
+        # Same-machine reproducibility, and the record of what this runner built. Two builds
+        # here share a filesystem, a clock and a uv, so they cannot disagree about anything
+        # environmental — which is the class of difference that matters. The digest is
+        # uploaded so a maintainer can build the same commit on their own machine and
+        # compare against it:
+        #   gh run download <id> --name build-digest
+        #   uv run python scripts/check_reproducible_build.py --compare-with build-digest.json
+        run: uv run python scripts/check_reproducible_build.py --digest-out dist/build-digest.json
+
+      - name: Upload the build record
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-digest
+          path: dist/build-digest.json
