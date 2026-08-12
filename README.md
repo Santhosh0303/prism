@@ -216,11 +216,13 @@ one that meets it. The latency series are taken under a longer
 instrumentation timeout so that a run which breaches the deadline still yields a
 distribution instead of nothing.
 
-Reference measurement p95 landed between 3,154 ms and 3,468 ms across its three runs —
-inside the 3,500 ms target, but by less than the run-to-run spread itself, so read "meets
-target" as provisional on this hardware, and read it as describing 60 pairs of inference
-rather than 160. An earlier run published 4,876 ms; it was taken under other load and is not
-comparable. Full per-run figures are in [`docs/performance.md`](docs/performance.md).
+Reference measurement p95 lands between 3,589 ms and 3,673 ms across its three runs on
+2026-08-12, **outside the 3,500 ms target**, and describes 60 pairs of inference rather than
+160. The superseded 2026-08-11 series measured 3,154–3,468 ms and sat inside that target by
+less than its own run-to-run spread; it is not reproducible on this machine today, from its
+own commit or the current one. An earlier run published 4,876 ms; it was taken under other
+load and is not comparable. Per-run figures are in
+[`docs/performance.md`](docs/performance.md).
 Preflight is effectively free, and doubles as the load indicator: it is pure Python and
 loads no model, so a preflight p95 that moves has measured the machine, not the code.
 

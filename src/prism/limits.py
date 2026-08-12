@@ -78,10 +78,14 @@ MAX_DEFAULT_REPORT_BYTES: Final[int] = 12 * 1024
 #: worst measurement took 9,564 ms and passed, the next took 10,246 ms and failed. Same
 #: machine, same input, different verdict.
 #:
-#: 15.0 is the worst measured idle maximum (10,246 ms) plus 46%. It is a bound on how long
-#: a caller waits, not a guarantee of completion: the same workload measured 14,340 ms p95
-#: on a busy machine, so a loaded host still returns ``TIMEOUT``, which is the deadline
-#: working rather than failing.
+#: 15.0 is the worst measured idle maximum (10,246 ms) plus 46%. It is a bound on how long a
+#: caller waits, not a guarantee of completion under arbitrary load, and the margin is very
+#: different on the two sides of that. The one loaded run on record measured p95 14,340 ms
+#: and p99 14,592 ms and returned ``TIMEOUT`` — but it was judged against the old 10 s
+#: deadline, and under 15 s it would have completed, by 2.8%. So this figure is not evidence
+#: that a busy host still times out; it is evidence that 15 s covers the measured idle worst
+#: case with room and the measured *loaded* worst case with almost none. Load heavier than
+#: that still returns ``TIMEOUT``, which is the deadline working rather than failing.
 #:
 #: What did *not* move: ``MAX_CROSS_CANDIDATE_PAIRS`` is still 160, and the 8,000 ms p95 and
 #: 10,000 ms p99 budgets in ``scripts/compare_benchmarks.py`` are unchanged and are still
