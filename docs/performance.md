@@ -139,6 +139,71 @@ the run ends: the maximum sits inside a measurement, and the final reading walks
 this run the sampled maximum was 13 MB above the final reading; on the reference workload the
 two agree to within 0.1%, which is why the earlier 750 MB figures need no restatement.
 
+## Measured — endurance soak
+
+`tests/endurance/test_soak.py::test_measurement_reaches_a_resource_plateau`, run explicitly
+on the machine above:
+
+```bash
+uv run pytest tests/endurance -m "endurance and models"
+```
+
+500 measurements of the reference workload, real inference throughout, 25.2 minutes; the
+first 10 are discarded as warm-up and the remaining 490 are scored in five equal windows.
+The run writes `benchmarks/out/soak.json` and the test then reads that file back and asserts
+against what is on disk — a soak that was started, or whose record was never opened, is not
+evidence.
+
+| Window | Measurements | Mean RSS | Handles | Threads | Permits free at rest | Encoder sessions | Preflight p95 | Measurement p95 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1 (warm baseline) | 98 | 730.6 MB | 346 | 38.4 | 2 of 2 | 1 | 0.426 ms | 3,780 ms |
+| 2 | 98 | 731.7 MB | 344 | 37.7 | 2 of 2 | 1 | 0.327 ms | 3,209 ms |
+| 3 | 98 | 732.6 MB | 344 | 37.2 | 2 of 2 | 1 | 0.308 ms | 3,047 ms |
+| 4 | 98 | 733.6 MB | 344 | 37.2 | 2 of 2 | 1 | 0.308 ms | 3,071 ms |
+| 5 (final 20%) | 98 | 734.6 MB | 344 | 37.0 | 2 of 2 | 1 | 0.310 ms | 2,995 ms |
+
+**Verdict `PASS`, no findings.** The final window is 1.0055× the warm baseline on RSS,
+0.993× on handles and 0.964× on threads, against a 5% allowance. Peak RSS over the whole run
+was 735.1 MB from 20,308 samples. Every permit was back at rest in every window, no worker
+was ever abandoned, the measurement pool never held more than one thread, and one pair of
+encoder sessions served all 500 measurements.
+
+**RSS did rise in every window, and that is recorded rather than rounded off.** The rise is
+1.04 MB per window, 0.55% end to end — roughly 10 KB per measurement. It sits below the 1%
+floor the slope check applies, so it is not reported as a leak, and 25 minutes cannot
+separate a drift that small from allocator behaviour. What can be said is bounded: no leak
+large enough to matter over half an hour, and nothing here rules out a slow one over days.
+Extrapolating 10 KB per measurement is arithmetic, not a measurement, and is not published
+as a figure.
+
+**The ambient control.** Preflight loads no model, so its p95 cannot move because of
+anything the soak does; a moving preflight p95 means the machine moved. It is recorded per
+window, and a window more than 1.5× the baseline is discarded rather than believed. No
+window was discarded here: p95 fell from 0.426 ms to about 0.31 ms and stayed there, which
+is the process settling, not drifting. The absolute figures sit above the 0.110–0.144 ms
+idle numbers in the table above because the soak itself keeps the CPU busy for 25 minutes —
+the control watches drift across windows, not absolute idleness. Had the baseline or the
+final window been contaminated, the verdict would be `INCONCLUSIVE`; a resource slope
+measured on a loaded machine is a reading of the machine, which this project has already
+published once and does not intend to repeat.
+
+## Cross-machine build reproducibility
+
+`scripts/check_reproducible_build.py` builds twice and compares normalised wheel content.
+Two builds on one machine share a filesystem, a clock and a `uv`, so they are held constant
+on exactly the inputs that would differ elsewhere. The CI `reproducible-build` job therefore
+also writes its own record and uploads it, and the same script compares a local build
+against it:
+
+```bash
+gh run download <run-id> --name build-digest
+uv run python scripts/check_reproducible_build.py --compare-with build-digest.json
+```
+
+The record carries the commit it was built from and the comparison refuses to proceed when
+the two do not match, so a matching digest is evidence about one source rather than about
+two moments.
+
 ## Baseline
 
 The [regression baseline](../benchmarks/baselines/regression-baseline.json)
@@ -181,9 +246,11 @@ apparent agreement, so it is prohibited in `pair.py` and the prohibition is chec
 
 ## Not measured
 
-- No endurance soak. The in-suite probe is short and is not evidence of a plateau over
-  hours.
+- No soak longer than half an hour. The 25-minute run above shows a plateau over 490
+  measurements; it cannot speak to a process left up for days, and the 0.55% rise it did
+  record is below what a run that length can attribute.
+- No soak under concurrency. Measurements in the soak are sequential, so the second permit
+  and the second pool thread are never exercised over a sustained run.
 - No throughput-under-concurrency figure. Admission is capped at two active measurements
   with zero queue, which is tested for correctness but not profiled for sustained rate.
 - No second hardware platform, and no Linux or macOS numbers.
-- No cross-machine reproducibility comparison.

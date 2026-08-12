@@ -15,6 +15,7 @@ import json
 import sys
 import time
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -35,6 +36,7 @@ for directory in (SCRIPTS, BENCHMARKS):
 
 import check_links  # noqa: E402
 import check_regression_baseline  # noqa: E402
+import check_reproducible_build  # noqa: E402
 import check_seed_lock  # noqa: E402
 import compare_benchmarks  # noqa: E402
 import run  # noqa: E402
@@ -402,3 +404,163 @@ def test_a_reading_taken_beside_the_peak_can_never_exceed_it() -> None:
         del ballast
 
     assert sampler.peak_bytes >= final_reading
+
+
+# --------------------------------------------------------------------------------------
+# endurance soak verdict controls
+# --------------------------------------------------------------------------------------
+#
+# The soak itself takes half an hour and needs the model bundle, so it cannot run here.
+# What runs here is the part that decides what the soak means: a verdict function whose
+# failure mode is reporting PASS forever. The private names are imported deliberately —
+# duplicating the logic to test it would leave the copy passing and the original free to
+# rot.
+
+from prism.limits import MAX_CONCURRENT_MEASUREMENTS  # noqa: E402
+from tests.endurance import test_soak  # noqa: E402
+
+
+def soak_samples(
+    rss_by_index: list[int],
+    preflight_ms: list[float] | None = None,
+    **overrides: object,
+) -> list[dict[str, object]]:
+    """Post-warm-up samples in the shape the soak records them."""
+    latencies = preflight_ms or [0.12] * len(rss_by_index)
+    samples: list[dict[str, object]] = []
+    for index, (rss, preflight) in enumerate(zip(rss_by_index, latencies, strict=True)):
+        sample: dict[str, object] = {
+            "measurement": index,
+            "measure_ms": 3_400.0,
+            "preflight_ms": preflight,
+            "rss_bytes": rss,
+            "handles": 900,
+            "threads": 12,
+            "measure_workers": MAX_CONCURRENT_MEASUREMENTS,
+            "available_permits": MAX_CONCURRENT_MEASUREMENTS,
+            "abandoned_workers": 0,
+            "encoder_session_id": 4_242,
+        }
+        sample.update(overrides)
+        samples.append(sample)
+    return samples
+
+
+def soak_verdict(samples: list[dict[str, object]]) -> tuple[str, list[str]]:
+    verdict, findings, _ = test_soak._evaluate(test_soak._windows(samples))
+    return verdict, findings
+
+
+def test_a_flat_soak_passes() -> None:
+    """The control has to accept the thing it exists to accept, or it is just a red light."""
+    plateau = [760_000_000, 760_400_000, 760_100_000, 760_300_000, 760_200_000] * 4
+    verdict, findings = soak_verdict(soak_samples(plateau))
+    assert (verdict, findings) == ("PASS", [])
+
+
+def test_a_leaking_soak_is_caught() -> None:
+    """Five megabytes a measurement: over the window allowance and rising in every window."""
+    leak = [760_000_000 + index * 5_000_000 for index in range(20)]
+    verdict, findings = soak_verdict(soak_samples(leak))
+    assert verdict == "FAIL"
+    assert any("rss in the final 20% window" in finding.lower() for finding in findings)
+    assert any("rose in every retained window" in finding for finding in findings)
+
+
+def test_a_drift_under_the_window_allowance_is_still_caught() -> None:
+    """The leak shape the 5% window comparison misses on its own.
+
+    A megabyte per measurement moves the final window only 2% above the baseline — inside
+    the allowance, and still 20 MB an hour on a process that is supposed to have plateaued.
+    The slope is what catches it, which is why both checks are here.
+    """
+    drift = [760_000_000 + index * 1_000_000 for index in range(20)]
+    verdict, findings = soak_verdict(soak_samples(drift))
+    assert verdict == "FAIL"
+    assert not any("final 20% window" in finding for finding in findings)
+    assert any("rose in every retained window" in finding for finding in findings)
+
+
+def test_a_soak_on_a_loaded_machine_is_inconclusive_not_a_leak() -> None:
+    """The failure this exists to prevent, and it has already happened once on this project.
+
+    Preflight loads no model, so its p95 tripling measured the machine. A run whose RSS
+    slope arrives together with a preflight slope has not observed a leak; it has observed
+    a busy box, and reporting either verdict from it would be a fabrication.
+    """
+    rising = [760_000_000 + index * 1_000_000 for index in range(20)]
+    ambient = [0.12] * 12 + [0.31] * 8
+    verdict, findings = soak_verdict(soak_samples(rising, preflight_ms=ambient))
+    assert verdict == "INCONCLUSIVE"
+    assert any("ambient load" in finding for finding in findings)
+
+
+def test_a_withheld_permit_is_caught() -> None:
+    """Capacity lost to a permit that was never released, which no RSS reading would show."""
+    plateau = [760_000_000] * 20
+    verdict, findings = soak_verdict(
+        soak_samples(plateau, available_permits=MAX_CONCURRENT_MEASUREMENTS - 1)
+    )
+    assert verdict == "FAIL"
+    assert any("permit was not released" in finding for finding in findings)
+
+
+def test_rebuilt_encoder_sessions_are_caught() -> None:
+    """One process, one pair of sessions. A second pair is a duplicate model in memory."""
+    plateau = [760_000_000] * 20
+    samples = soak_samples(plateau)
+    for index, sample in enumerate(samples):
+        sample["encoder_session_id"] = 4_242 + index
+    verdict, findings = soak_verdict(samples)
+    assert verdict == "FAIL"
+    assert any("encoder sessions were rebuilt" in finding for finding in findings)
+
+
+# --------------------------------------------------------------------------------------
+# cross-machine build controls
+# --------------------------------------------------------------------------------------
+#
+# The build itself is exercised by the gate; what is exercised here is the comparison the
+# gate cannot make on one machine. Building twice locally holds every environmental input
+# constant, so the same-machine check passes by construction on exactly the differences a
+# second machine would expose.
+
+LOCAL_BUILD: Final[dict[str, object]] = {
+    "source_revision": "f97a5e1",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.11",
+    "artifacts": {"prism_preflight-0.1.0-py3-none-any.whl": "sha256:aaaa"},
+}
+
+
+def ci_build(**overrides: object) -> dict[str, object]:
+    record: dict[str, object] = {
+        "source_revision": "f97a5e1",
+        "platform": "Linux-6.11-x86_64",
+        "python": "3.12.11",
+        "artifacts": {"prism_preflight-0.1.0-py3-none-any.whl": "sha256:aaaa"},
+    }
+    record.update(overrides)
+    return record
+
+
+def test_two_machines_agreeing_produce_no_finding() -> None:
+    assert check_reproducible_build.cross_machine_findings(LOCAL_BUILD, ci_build()) == []
+
+
+def test_a_machine_dependent_artifact_is_caught() -> None:
+    """The finding two builds in one temporary directory can never produce."""
+    findings = check_reproducible_build.cross_machine_findings(
+        LOCAL_BUILD,
+        ci_build(artifacts={"prism_preflight-0.1.0-py3-none-any.whl": "sha256:bbbb"}),
+    )
+    assert any("depends on the machine that built it" in finding for finding in findings)
+
+
+def test_comparing_two_different_commits_is_refused() -> None:
+    """Same digest, different source, is not evidence of anything — and the mismatch case
+    would blame the machine for a difference that is really a difference in the code."""
+    findings = check_reproducible_build.cross_machine_findings(
+        LOCAL_BUILD, ci_build(source_revision="0000000")
+    )
+    assert any("different source" in finding for finding in findings)

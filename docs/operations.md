@@ -133,9 +133,18 @@ the regression baseline is unsigned. Both are stated as `SKIP` rather than worke
 
 ## What is not implemented
 
-Stated so nobody plans around a control that is not here:
+Stated so nobody plans around a control that is not here. Each one carries why it is absent
+and the next thing that would actually close it — a pending item with no next action is a
+wish, and drifts into looking like a plan.
 
-- no release signing, provenance attestation, or transparency-log verification;
-- no signed regression baseline — the committed one is a recorded measurement;
-- no endurance soak evidence beyond the short in-suite probe;
-- no compatibility matrix against pinned prior host releases.
+| Control | State | Why it is not closed | Next executable action |
+|---|---|---|---|
+| Artifact signing, SLSA provenance, transparency log | `PENDING_EXTERNAL_VALIDATION` | There is no release identity: no key, no OIDC issuer, no published project on an index. Signing without one produces an attestation nobody can check. | Register the project on PyPI, enable trusted publishing for the release workflow, then attest the wheel in `release.yml` and verify the attestation in a job that fails when it is missing. |
+| Trusted publishing | `PENDING_EXTERNAL_VALIDATION` | Same missing identity; the release workflow builds and hashes, but publishes nowhere. | Same as above; it is the same gate and should not be counted twice. |
+| Compatibility matrix against pinned prior host releases | `PENDING_EXTERNAL_VALIDATION` | The host versions to pin have not been chosen, and a matrix against "latest" re-measures a moving target and reports it as compatibility. | Pin explicit versions of the MCP hosts PRISM claims to support, add them to the `determinism` matrix in `ci.yml`, and record the measured pass per pinned version. |
+| Signed regression baseline | `UNSIGNED`, recorded | Depends on the release identity above. The committed baseline is a measurement, not attested evidence, and `check_regression_baseline.py --require-signature` fails on it on purpose. | Sign the baseline with the release identity once it exists. |
+| Evaluation corpus, precision/recall/F1 | absent | No corpus of real pre-existing outputs with provenance and independent second-human labels exists. | Harvest and label a corpus; commit the manifest hash before any encoder run; score the sealed set once. |
+
+One item that used to sit in this list has been executed and moved out: the **endurance
+soak** is measured, and both what it shows and what it cannot settle are in
+[`performance.md`](performance.md).
