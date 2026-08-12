@@ -1,12 +1,20 @@
 name: Release
 
-# Runs on a version tag. It builds, gates, and publishes evidence.
+# Runs on a version tag. It gates, builds, attests, publishes, and then verifies that the
+# attestation it just claimed to produce actually exists.
 #
-# What it does NOT do yet, stated here rather than implied by the file existing: there is no
-# Sigstore signing, no SLSA provenance attestation, no transparency-log verification, and no
-# trusted publishing to an index. Those are Task 19 work that has not been done. Until they
-# are, this workflow produces a build and its evidence — not an attested release — and the
-# release notes must say so.
+# What is wired here and what is true are different things, so both are stated. The pipeline
+# below is complete: trusted publishing over OIDC, PEP 740 attestations uploaded to the index,
+# SLSA provenance recorded with GitHub, and a verification job that fails when the provenance
+# is absent. None of it has ever run, because it cannot until a release identity exists on the
+# index side -- a pending publisher naming this repository and this workflow file. Until that
+# is configured and one real tag has gone through, signing and provenance remain
+# PENDING_EXTERNAL_VALIDATION, and the release notes must say so. A workflow that exists is
+# not evidence; a run is.
+#
+# No API token is used, and none should ever be added. Trusted publishing mints a short-lived
+# credential from the OIDC identity of this workflow, scoped to this repository. A long-lived
+# token in a secret is the thing this design exists to avoid.
 
 on:
   push:
@@ -31,6 +39,22 @@ jobs:
       - name: Sync the locked environment
         run: uv sync --frozen
 
+      - name: The tag must name the version being released
+        if: startsWith(github.ref, 'refs/tags/v')
+        # A PyPI upload is consumed the moment it lands: that version number can never be
+        # replaced, only yanked. Tagging v0.1.1 against a tree that still declares 0.1.0
+        # would publish 0.1.0 under a tag saying otherwise, and the only remedy is burning
+        # another version. Refusing here costs one comparison.
+        run: |
+          declared=$(uv run python -c "import tomllib, pathlib
+          print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          tagged="${GITHUB_REF_NAME#v}"
+          echo "declared=${declared}  tagged=${tagged}"
+          if [ "${declared}" != "${tagged}" ]; then
+            echo "::error::tag ${GITHUB_REF_NAME} does not match the declared version ${declared}"
+            exit 1
+          fi
+
       - name: Run every blocking check
         # Not --strict: the seed corpus does not exist and the baseline is unsigned, so
         # --strict fails by design on this build. The full report is published either way,
@@ -53,6 +77,11 @@ jobs:
     needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      # Both are for the provenance attestation below, and for nothing else.
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v7
 
@@ -67,6 +96,16 @@ jobs:
 
       - name: Confirm the build is reproducible
         run: uv run python scripts/check_reproducible_build.py
+
+      - name: Attest the build provenance
+        # SLSA provenance, recorded against GitHub's attestation store: which workflow, at
+        # which commit, on which runner, produced exactly these bytes. The verify job below
+        # reads it back rather than trusting that this step ran.
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
 
       - name: Generate the SBOM
         run: uv run python scripts/build_sbom.py --output dist/sbom.cdx.json
@@ -83,11 +122,85 @@ jobs:
           cat SHA256SUMS
 
       - name: Upload the distribution
+        # Distributions only. The publish job uploads this directory wholesale, so anything
+        # that is not a distribution has to live in a different artifact or it becomes an
+        # attempted upload of SHA256SUMS to the index.
         uses: actions/upload-artifact@v7
         with:
           name: distribution
           path: |
             dist/*.whl
             dist/*.tar.gz
+
+      - name: Upload the evidence about it
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-evidence
+          path: |
             dist/SHA256SUMS
             dist/sbom.cdx.json
+            dist/sbom.uv.json
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    # Only a tag publishes. workflow_dispatch still gates, builds and attests, so the whole
+    # pipeline can be exercised without consuming a version number that can never be reused.
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+      url: https://pypi.org/p/prism-preflight
+    permissions:
+      # The only credential in this workflow. PyPI mints a short-lived token from this OIDC
+      # identity, scoped to this repository and this workflow file.
+      id-token: write
+    steps:
+      - name: Download the distribution
+        uses: actions/download-artifact@v7
+        with:
+          name: distribution
+          path: dist
+
+      - name: Publish with trusted publishing and PEP 740 attestations
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          attestations: true
+
+  verify:
+    name: Verify the release attestation
+    needs: publish
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - name: Download the distribution
+        uses: actions/download-artifact@v7
+        with:
+          name: distribution
+          path: dist
+
+      - name: Every published artifact must carry verifiable provenance
+        # This job exists because the build job claiming to attest is not evidence that it
+        # did. The attestation is read back from GitHub and checked against this repository.
+        #
+        # The empty-list guard is not defensive noise: a for loop over no files succeeds,
+        # so without it this job would report a green tick in exactly the case where nothing
+        # was published at all.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          artifacts=(dist/*.whl dist/*.tar.gz)
+          if [ ${#artifacts[@]} -eq 0 ]; then
+            echo "::error::no distributions were found to verify"
+            exit 1
+          fi
+          for artifact in "${artifacts[@]}"; do
+            echo "verifying ${artifact}"
+            gh attestation verify "${artifact}" --repo "${GITHUB_REPOSITORY}"
+          done
