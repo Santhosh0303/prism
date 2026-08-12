@@ -74,7 +74,10 @@ def _build_into(destination: Path) -> tuple[Path, ...]:
     return tuple(sorted(destination.glob("*.whl")))
 
 
-def _git(*arguments: str) -> str:
+def _git(*arguments: str) -> str | None:
+    """Output, or `None` when git could not answer. `None` and empty are different answers:
+    `git status --porcelain` says "clean" with empty output and says nothing at all when it
+    fails, and collapsing the two would report a tree of unknown state as clean."""
     try:
         completed = subprocess.run(  # noqa: S603 - fixed argv from this module, no shell
             ["git", *arguments],  # noqa: S607 - resolved from PATH
@@ -85,8 +88,8 @@ def _git(*arguments: str) -> str:
             timeout=30,
         )
     except (OSError, subprocess.SubprocessError):
-        return "unknown"
-    return completed.stdout.strip() or "unknown"
+        return None
+    return completed.stdout.strip()
 
 
 def _source_tree() -> str:
@@ -98,14 +101,27 @@ def _source_tree() -> str:
     source. Two commits with identical content have identical trees, which is the property
     that actually decides whether two machines built the same thing.
     """
-    return _git("rev-parse", "HEAD^{tree}")
+    return _git("rev-parse", "HEAD^{tree}") or "unknown"
+
+
+def _working_tree_is_dirty() -> bool:
+    """`uv build` builds the working tree; `HEAD^{tree}` names what was committed.
+
+    With uncommitted changes the two are different sources, so a record could name a tree
+    the artifact was not built from — and two such records could agree on a tree while their
+    wheels came from different code, which is the one claim this comparison exists to make.
+    A git that cannot answer counts as dirty: the point is to show the tree is clean, and
+    silence does not show that.
+    """
+    return _git("status", "--porcelain") != ""
 
 
 def _build_record(digests: dict[str, str]) -> dict[str, Any]:
     return {
         "source_tree": _source_tree(),
+        "working_tree_dirty": _working_tree_is_dirty(),
         # Informational only. On a pull_request run this is the ephemeral merge commit.
-        "source_revision": os.environ.get("GITHUB_SHA") or _git("rev-parse", "HEAD"),
+        "source_revision": os.environ.get("GITHUB_SHA") or _git("rev-parse", "HEAD") or "unknown",
         "platform": platform.platform(),
         "python": platform.python_version(),
         "artifacts": digests,
@@ -132,6 +148,16 @@ def cross_machine_findings(local: dict[str, Any], recorded: dict[str, Any]) -> l
             f"{local.get('source_tree')}: different source, so a matching digest would prove "
             "nothing and a differing one would explain itself"
         )
+        return findings
+
+    for side, record in (("this machine", local), ("the record", recorded)):
+        if record.get("working_tree_dirty", True):
+            findings.append(
+                f"{side} built a working tree with uncommitted changes, so the tree it names "
+                "is not the source the wheel came from and the comparison is between two "
+                "unknowns"
+            )
+    if findings:
         return findings
 
     local_artifacts: dict[str, str] = local.get("artifacts", {})

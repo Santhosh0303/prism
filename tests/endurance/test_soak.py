@@ -21,9 +21,12 @@ model, so its p95 cannot move because of anything this soak does; if it moves, t
 moved. Measured on the development box: 0.110-0.144 ms idle against 0.306 ms under load,
 while the same workload's measurement p95 went from 9,421 to 14,340 ms. A 30-minute run
 that samples RSS on a busy machine will read that ambient load as a memory slope. So
-preflight p95 is recorded per window and a window whose p95 has moved is discarded rather
-than believed; if the windows the verdict depends on are the discarded ones, the run is
-`INCONCLUSIVE` and says so instead of reporting a leak or a plateau it cannot see.
+preflight p95 is recorded per window, and a window more than 1.5x the median of those
+figures is discarded rather than believed; if the baseline or the final window is one of the
+discarded ones, the run is `INCONCLUSIVE` and says so instead of reporting a leak or a
+plateau it cannot see. The median rather than the baseline window's own p95, because a
+window compared against itself can never be flagged, and the baseline is the one every ratio
+here is anchored to.
 """
 
 from __future__ import annotations
@@ -278,7 +281,13 @@ def _collect(
 def _evaluate(windows: list[dict[str, Any]]) -> tuple[str, list[str], dict[str, Any]]:
     """Verdict, findings, and the numbers they were reached from."""
     baseline, final = windows[0], windows[-1]
-    reference_p95 = baseline["preflight_p95_ms"]
+    # The reference is the median of the per-window figures, not the baseline window's own.
+    # Measured against itself the baseline reduces to `p95 > p95 * 1.5` and can never be
+    # flagged, which would leave the one window the whole comparison is anchored to as the
+    # only one nobody checks. The limit of the median is worth naming: load that is present
+    # for the entire run moves the median with it and cannot be detected this way, so the
+    # absolute per-window figures are recorded and not only the ratios.
+    reference_p95 = statistics.median([window["preflight_p95_ms"] for window in windows])
     contaminated = [
         window["index"]
         for window in windows
@@ -297,7 +306,15 @@ def _evaluate(windows: list[dict[str, Any]]) -> tuple[str, list[str], dict[str, 
         later > earlier for earlier, later in itertools.pairwise(retained_rss)
     )
     rise_ratio = _ratio(retained_rss[-1], retained_rss[0])
-    slope_bytes = statistics.linear_regression(range(len(retained_rss)), retained_rss).slope
+    # A regression needs two points. With five windows and a median reference at most two
+    # can exceed the tolerance, so three always survive — but a run that ends in
+    # StatisticsError throws away half an hour of measurement, and the invariant is subtle
+    # enough not to be worth betting that on.
+    slope_bytes = (
+        statistics.linear_regression(range(len(retained_rss)), retained_rss).slope
+        if len(retained_rss) >= 2
+        else 0.0
+    )
     monotonic = rising and rise_ratio > MONOTONIC_RISE_FLOOR_RATIO
 
     evidence: dict[str, Any] = {
@@ -310,7 +327,9 @@ def _evaluate(windows: list[dict[str, Any]]) -> tuple[str, list[str], dict[str, 
         "monotonic_rss_increase_across_windows": monotonic,
         "ambient": {
             "control": "preflight p95 per window; preflight loads no model",
-            "baseline_preflight_p95_ms": reference_p95,
+            "reference_preflight_p95_ms": reference_p95,
+            "reference": "median of the per-window figures",
+            "baseline_preflight_p95_ms": baseline["preflight_p95_ms"],
             "final_preflight_p95_ms": final["preflight_p95_ms"],
             "tolerance_ratio": AMBIENT_P95_TOLERANCE_RATIO,
             "contaminated_windows": contaminated,
@@ -319,13 +338,15 @@ def _evaluate(windows: list[dict[str, Any]]) -> tuple[str, list[str], dict[str, 
     }
 
     if baseline["index"] in contaminated or final["index"] in contaminated:
+        offender = baseline if baseline["index"] in contaminated else final
+        moved = "baseline" if offender is baseline else "final"
         return (
             "INCONCLUSIVE",
             [
-                "ambient load moved preflight p95 from "
-                f"{reference_p95:.3f} ms to {final['preflight_p95_ms']:.3f} ms across the "
-                "run, so a resource slope here would be a reading of the machine. Re-run on "
-                "an idle box."
+                f"ambient load moved the {moved} window's preflight p95 to "
+                f"{offender['preflight_p95_ms']:.3f} ms against a "
+                f"{reference_p95:.3f} ms median across the run, so a resource comparison "
+                "anchored on it would be a reading of the machine. Re-run on an idle box."
             ],
             evidence,
         )
