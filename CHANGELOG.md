@@ -30,11 +30,16 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
   a pair, gates the declared measurement deadline on it, and reports the pair work it
   actually performed.
 - An endurance soak over the **measurement** path, not only preflight and registry loads:
-  `tests/endurance/test_soak.py` runs 500 measurements with real inference, discards the
-  first 10 as warm-up, scores the rest in five windows sampling RSS, handles, threads,
-  workers, permits and encoder sessions, and requires the final window within 5% of the warm
-  baseline with no monotonic rise. It writes `benchmarks/out/soak.json` and then reads that
-  file back and asserts against what is on disk, because a soak that was started, or whose
+  `tests/endurance/test_soak.py` runs up to 500 measurements with real inference — the
+  default ceiling, set by `PRISM_SOAK_MEASUREMENTS`, alongside a 30-minute budget, whichever
+  binds first — discards the first tenth as warm-up to a maximum of 10, and scores the rest
+  in five windows sampling RSS, handles, threads, workers, permits and encoder sessions,
+  requiring the final window within 5% of the warm baseline with no monotonic rise. The
+  verdict needs only one scored measurement per window, so a short configured run is a valid
+  test and **not** the half-hour of evidence a release claim needs; the length actually
+  reached is recorded in the artifact and is what should be cited. It writes
+  `benchmarks/out/soak.json` and then reads that file back and asserts against what is on
+  disk, because a soak that was started, or whose
   record was never opened, is not evidence. Windows whose preflight p95 exceeds 1.5× the
   median across windows are discarded rather than believed — preflight loads no model, so a
   moving preflight p95 means the machine moved and not the code.
@@ -44,7 +49,10 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
   and matches nothing a maintainer can check out. Both records state whether the tree they
   built was clean, and a build from a dirty tree is refused: `uv build` builds the working
   tree while the tree hash names what was committed, so two records could otherwise agree on a
-  tree while their wheels came from different code.
+  tree while their wheels came from different code. What matches is the **normalised content
+  digest** — each archive reduced to a sorted list of member names and member digests, then
+  hashed — not the raw wheel bytes, which a zip's recorded timestamps and member ordering make
+  differ between machines whatever the contents are.
 
 ### Fixed
 
@@ -102,12 +110,12 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
 - Two controls left the "What is not implemented" list in [`docs/operations.md`](docs/operations.md)
   because they executed, not because they were re-described: the endurance soak is measured
   and its artifact was read, and one Windows local build and one Linux CI-runner build of the
-  same tree produced the same wheel. What each one does **not** cover is published beside it in
-  [`docs/performance.md`](docs/performance.md). Everything still on that list — artifact
-  signing, SLSA provenance, transparency log, trusted publishing, the signed regression
-  baseline, the compatibility matrix against pinned prior host releases, and the evaluation
-  corpus — is unchanged. The first five are one blocker counted once: there is no release
-  identity, so an attestation would be one nobody can check.
+  same tree produced the same normalised wheel content. What each one does **not** cover is
+  published beside it in [`docs/performance.md`](docs/performance.md). Everything still on
+  that list — artifact signing, SLSA provenance, transparency log, trusted publishing, the
+  signed regression baseline, the compatibility matrix against pinned prior host releases,
+  and the evaluation corpus — is unchanged. The first five are one blocker counted once:
+  there is no release identity, so an attestation would be one nobody can check.
 
 ## 0.1.0
 
