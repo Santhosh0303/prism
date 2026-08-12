@@ -63,10 +63,28 @@ jobs:
         # but it means this job needs the bundle that ci.yml's gates job deliberately skips.
         # Without it the gate fails on four missing-artifact errors, which is what the first
         # run of this workflow did, at tag v0.1.0.
-        uses: actions/cache@v6
+        #
+        # restore@v6, not cache@v6: this job never writes the cache. A release runs in the
+        # most privileged context in the repository and should consume caches, not populate
+        # them; ci.yml's push runs on main keep the entry warm.
+        uses: actions/cache/restore@v6
         with:
           path: models/artifacts
           key: model-bundle-${{ hashFiles('models/artifacts/manifest.json') }}
+
+      - name: The restored cache must not have replaced the committed manifest
+        # models/artifacts/manifest.json is committed AND lives inside the cached directory,
+        # so a restore extracts over it. That matters because verify_models.py checks the
+        # model bytes against that manifest: if the manifest itself came out of the cache,
+        # both sides of the comparison are cache-controlled and the check proves nothing.
+        # The cache key is derived from the committed manifest via hashFiles, which runs
+        # before the restore, so an honest entry cannot differ here -- a difference means the
+        # bytes under this key are not the bytes that key describes.
+        run: |
+          if ! git diff --exit-code -- models/artifacts/manifest.json; then
+            echo "::error::the restored cache replaced the committed model manifest"
+            exit 1
+          fi
 
       - name: Acquire the bundle
         if: steps.bundle.outputs.cache-hit != 'true'

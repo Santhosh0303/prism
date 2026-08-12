@@ -135,6 +135,18 @@ jobs:
           # cannot quietly serve yesterday's weights to today's assertions.
           key: model-bundle-${{ hashFiles('models/artifacts/manifest.json') }}
 
+      - name: The restored cache must not have replaced the committed manifest
+        # The same guard release.yml carries, at the site that writes this cache entry.
+        # manifest.json is committed and sits inside the cached directory, so a restore
+        # extracts over it — and verify_models.py checks the model bytes against that
+        # manifest. If the manifest came from the cache too, the check compares
+        # cache-controlled bytes against cache-controlled hashes and proves nothing.
+        run: |
+          if ! git diff --exit-code -- models/artifacts/manifest.json; then
+            echo "::error::the restored cache replaced the committed model manifest"
+            exit 1
+          fi
+
       - name: Acquire the bundle
         if: steps.bundle.outputs.cache-hit != 'true'
         # 403 MB from the pinned immutable revisions. Refuses a mutable ref, an
