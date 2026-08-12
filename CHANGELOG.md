@@ -29,6 +29,22 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
   scored in both directions. `benchmarks/run.py` asserts that and fails the run if E1 removes
   a pair, gates the declared measurement deadline on it, and reports the pair work it
   actually performed.
+- An endurance soak over the **measurement** path, not only preflight and registry loads:
+  `tests/endurance/test_soak.py` runs 500 measurements with real inference, discards the
+  first 10 as warm-up, scores the rest in five windows sampling RSS, handles, threads,
+  workers, permits and encoder sessions, and requires the final window within 5% of the warm
+  baseline with no monotonic rise. It writes `benchmarks/out/soak.json` and then reads that
+  file back and asserts against what is on disk, because a soak that was started, or whose
+  record was never opened, is not evidence. Windows whose preflight p95 exceeds 1.5× the
+  median across windows are discarded rather than believed — preflight loads no model, so a
+  moving preflight p95 means the machine moved and not the code.
+- A cross-machine build comparison. `check_reproducible_build.py --compare-with` holds a local
+  build against the record the CI `reproducible-build` job now uploads, keyed on the git tree
+  rather than the commit — a `pull_request` run builds a merge commit that exists on no branch
+  and matches nothing a maintainer can check out. Both records state whether the tree they
+  built was clean, and a build from a dirty tree is refused: `uv build` builds the working
+  tree while the tree hash names what was committed, so two records could otherwise agree on a
+  tree while their wheels came from different code.
 
 ### Fixed
 
@@ -83,6 +99,15 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
   this machine from its own commit.
 - Measurement p95 is republished from three consecutive release runs (3,154–3,468 ms). The
   previously published 4,876 ms was measured on a loaded machine.
+- Two controls left the "What is not implemented" list in [`docs/operations.md`](docs/operations.md)
+  because they executed, not because they were re-described: the endurance soak is measured
+  and its artifact was read, and one Windows local build and one Linux CI-runner build of the
+  same tree produced the same wheel. What each one does **not** cover is published beside it in
+  [`docs/performance.md`](docs/performance.md). Everything still on that list — artifact
+  signing, SLSA provenance, transparency log, trusted publishing, the signed regression
+  baseline, the compatibility matrix against pinned prior host releases, and the evaluation
+  corpus — is unchanged. The first five are one blocker counted once: there is no release
+  identity, so an attestation would be one nobody can check.
 
 ## 0.1.0
 
