@@ -126,10 +126,35 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
   and the evaluation corpus — is unchanged. The first five are one blocker counted once:
   there is no release identity, so an attestation would be one nobody can check.
 
-## 0.1.0
+## 0.1.0 — 2026-08-13
+
+Published to PyPI as `prism-preflight` 0.1.0, from tag `v0.1.0` at commit `1ca7e7b`, by
+[run 31649871113](https://github.com/Santhosh0303/prism/actions/runs/31649871113).
 
 Initial functionally complete build: preflight, measurement, synthesis contract, CLI, local
 stdio MCP server, and Claude Code and Codex skills over one tested core.
+
+**This release is attested, and the attestation was checked rather than assumed.** No API
+token exists or was used — PyPI minted a short-lived credential from the release workflow's
+OIDC identity. Both distributions carry a SLSA v1 provenance attestation signed through the
+Public Good Sigstore instance and recorded in Rekor, plus PEP 740 attestations naming the
+publisher `GitHub / Santhosh0303/prism / release.yml / pypi`. Verify a downloaded artifact
+yourself:
+
+```bash
+gh attestation verify prism_preflight-0.1.0-py3-none-any.whl --repo Santhosh0303/prism
+```
+
+That command was run against artifacts downloaded back from the index on a separate machine
+and exited 0 for both; the same wheel checked against an unrelated repository exited 1 with a
+404, which is the control that makes the first result mean something.
+
+**What this release does not claim.** The contradiction threshold is uncalibrated:
+authoritative contradiction fields are suppressed and no precision, recall, F1 or MCC is
+published, because none has been measured. The 8,000 ms p95 budget is missed by 17.8–24.8% on
+the worst-case workload, and is recorded as missed rather than adjusted. The regression
+baseline is unsigned. G17 and G20, the signed upgrade and rollback drills, need a second
+release to move between and remain open.
 
 The contradiction threshold is uncalibrated. Authoritative contradiction fields are
 suppressed, and no precision, recall, F1, or MCC is published, because none has been
