@@ -54,27 +54,53 @@ deadline. On current hardware it lands on both sides of that line. See
 
 ## Measured — reference workload, three consecutive release runs
 
-One machine, otherwise idle, three runs back to back. The spread is published because a
-single run would imply a precision this workload does not have. These figures describe 60
-scored pairs; the worst case is in the next section.
+One machine, other applications closed, three runs back to back on 2026-08-12. The spread is
+published because a single run would imply a precision this workload does not have. These
+figures describe 60 scored pairs; the worst case is in the next section.
 
 | Metric | Run 1 | Run 2 | Run 3 | Target | Hard limit |
 |---|---:|---:|---:|---:|---:|
-| Preflight p95 | 0.113 ms | 0.141 ms | 0.150 ms | < 15 ms | < 50 ms |
-| Preflight p99 | 0.165 ms | 0.174 ms | 0.228 ms | — | < 75 ms |
-| Measurement p50 | 3,063 ms | 3,212 ms | 3,232 ms | — | — |
-| Measurement p95 | 3,154 ms | 3,391 ms | 3,468 ms | < 3,500 ms | < 8,000 ms |
-| Measurement p99 | 3,207 ms | 3,392 ms | 3,579 ms | < 9,000 ms | < 10,000 ms |
-| CPU per measurement | 6.17 s | 6.48 s | 6.59 s | — | — |
-| Peak RSS | 750 MB | 750 MB | 750 MB | < 2.2 GB | < 3 GB |
-| Default report size | 3,175 B | 3,175 B | 3,175 B | < 6 KB | < 12 KB |
-| Cold start | 5,184 ms | 5,308 ms | 5,748 ms | reported | not gated |
+| Preflight p95 | 0.193 ms | 0.266 ms | 0.245 ms | < 15 ms | < 50 ms |
+| Preflight p99 | 0.290 ms | 0.337 ms | 0.337 ms | — | < 75 ms |
+| Measurement p50 | 3,485 ms | 3,473 ms | 3,545 ms | — | — |
+| Measurement p95 | **3,619 ms** | **3,589 ms** | **3,673 ms** | **< 3,500 ms** | < 8,000 ms |
+| Measurement p99 | 3,625 ms | 3,677 ms | 3,726 ms | < 9,000 ms | < 10,000 ms |
+| CPU per measurement | 7.65 s | 7.60 s | 7.70 s | — | — |
+| Peak RSS | 752 MB | 752 MB | 752 MB | < 2.2 GB | < 3 GB |
+| Default report size | 3,204 B | 3,204 B | 3,204 B | < 6 KB | < 12 KB |
+| Cold start | 6,666 ms | 6,438 ms | 6,271 ms | reported | not gated |
 
-Measurement p95 lands between 3,154 ms and 3,468 ms across the three runs — inside the
-3,500 ms target, but by a margin narrower than the run-to-run spread itself. Treat "meets
-target" as provisional on this hardware: a slightly slower machine or a busier one will miss
-it. Expect roughly 3.5 seconds for a full five-lens measurement. Preflight is effectively
-free at a fraction of a millisecond.
+**Measurement p95 misses the 3,500 ms target in all three runs, by 2.5% to 4.9%.** It is
+recorded as missed. It remains well inside the 8,000 ms hard limit, so
+`compare_benchmarks.py` reports it as a note rather than a failure — the target is a
+statement about what this workload should cost, and it is currently not met on this machine.
+Expect roughly 3.6 seconds for a full five-lens measurement. Preflight is still effectively
+free at a quarter of a millisecond.
+
+### The earlier figures, and why they moved
+
+The previous series, recorded 2026-08-11, measured p95 3,154 / 3,391 / 3,468 ms and preflight
+p95 0.113 / 0.141 / 0.150 ms. Measurement p95 is 6.7% higher now and preflight p95 is 73%
+higher. Two things were checked before that gap was attributed to anything.
+
+*It is not a code regression.* The commit the superseded baseline was recorded at,
+`eada7c8`, was checked out into a worktree and run on this machine against the same model
+bundle, the same `onnxruntime` 1.28.0, the same `INTRA_OP_THREADS = 2` and the same workload.
+It measures **p95 6,684 ms against today's 3,619 ms**: the current code is roughly 46% faster
+than the code that baseline shipped with. `eada7c8` called `enable_truncation` and
+`enable_padding` on both tokenizers inside every encode call; `501d62f` moved that to
+construction. Whatever the 6.7% is, it is not the measurement path getting slower.
+
+*It is environmental.* Preflight loads no model, allocates almost nothing and touches no
+encoder, so nothing in the measurement path can move it — and it rose 73%. Three separate
+sets of runs taken under three different load conditions, including one with the machine
+otherwise idle, all land in the same place, so this is the machine's current state rather
+than a busy moment. The 2026-08-11 figures are not reproducible on this machine today, from
+their own commit or any other.
+
+Worth stating for its own sake: `eada7c8` can no longer complete its own benchmark at its own
+10-second deadline here — its cold-start measurement, which included the model load, now
+exceeds it. That is independent of the straddle described below, and points the same way.
 
 **An earlier run on this same machine recorded a measurement p95 of 4,876 ms.** It was taken
 while the machine was under other load and is not comparable; it is mentioned because it was
@@ -87,7 +113,10 @@ Two release runs of the adversarial workload, back to back on the same idle mach
 observation rather than a baseline and it is not directly comparable with the table above.
 A third run, taken earlier while the machine was busy, is reported separately below.
 
-| Metric | Idle run A | Idle run B | Reference (worst of 3) | Target | Hard limit |
+Its reference column is the 2026-08-11 series these adversarial runs were taken beside, not
+the current one above; the two were measured together and are kept together.
+
+| Metric | Idle run A | Idle run B | Reference (worst of 3, 2026-08-11) | Target | Hard limit |
 |---|---:|---:|---:|---:|---:|
 | Pairs scored by NLI | 160 of 160 | 160 of 160 | 60 of 160 | — | — |
 | Preflight p95 | 0.144 ms | 0.110 ms | 0.150 ms | < 15 ms | < 50 ms |
@@ -291,12 +320,21 @@ case is still recorded as missing them.
 ## Baseline
 
 The [regression baseline](../benchmarks/baselines/regression-baseline.json)
-records the median run **of the reference workload**. It is **`UNSIGNED`** — there is no
-release signing pipeline yet, so it is a recorded measurement, not attested evidence, and
-`scripts/check_regression_baseline.py --require-signature` fails on it deliberately. It has
-not been re-pinned against the adversarial workload: three consecutive release runs on an
-idle machine are what a baseline requires, and a workload that fails its own deadline is not
-something to pin a regression budget to before that failure has been ruled on.
+records the median of three consecutive release runs **of the reference workload**. It is
+`prism-0.1.0-2026-08-12`, superseding `prism-0.1.0-2026-08-11`, and it is **`UNSIGNED`** —
+there is no release signing pipeline yet, so it is a recorded measurement, not attested
+evidence, and `scripts/check_regression_baseline.py --require-signature` fails on it
+deliberately.
+
+It was re-pinned because the superseded baseline no longer described anything reproducible:
+its figures do not come back on this machine, from its own commit or from the current one.
+The pin carries a measurement p95 of 3,619 ms, which misses the 3,500 ms target and says so
+rather than being rounded to it.
+
+It has still not been re-pinned against the adversarial workload. Three consecutive release
+runs on a quiet machine are what a baseline requires, and the workload that defines the
+worst case misses two hard limits by design of the measurement rather than by accident; it
+is recorded as a ceiling in its own section instead.
 
 `compare_benchmarks.py` refuses to evaluate relative regression across different hardware
 rather than reporting it with a caveat. A p95 from another machine is not a faster or slower
