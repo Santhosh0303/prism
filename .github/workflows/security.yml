@@ -9,7 +9,18 @@ on:
     # Weekly, Monday 03:00 UTC.
     - cron: "0 3 * * 1"
   workflow_dispatch:
+  push:
+    # Deliberately not path-filtered, unlike the pull_request trigger below. A merge commit
+    # is a tree nobody scanned: the pull request run scans the branch head, and the filter
+    # means most merges produce no run at all, so main could carry a commit with no security
+    # evidence of its own. That is not hypothetical -- neither #18 nor #19 touched the
+    # filtered paths, so at 11f3162 the newest run was against a pull request head that is
+    # not an ancestor of main. Every commit on main now gets its own run. ci.yml and
+    # codeql.yml already trigger this way; this file was the outlier.
+    branches: [main]
   pull_request:
+    # Filtered, because a pull request that touches none of these does not change what the
+    # scan would find, and the push run above is the backstop for the merged tree.
     paths:
       - "uv.lock"
       - "pyproject.toml"
@@ -59,7 +70,10 @@ jobs:
       - name: Upload the SBOM
         uses: actions/upload-artifact@v7
         with:
-          name: sbom-scheduled
+          # Not "sbom-scheduled": this workflow has four triggers and only one of them is
+          # the schedule, so that name described where three quarters of these artifacts
+          # came from incorrectly.
+          name: sbom
           path: dist/sbom.cdx.json
 
   offline:
