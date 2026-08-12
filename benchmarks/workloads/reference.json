@@ -168,7 +168,7 @@
   ],
   "config": {
     "include_raw_nli_scores": false,
-    "timeout_seconds": 10.0
+    "timeout_seconds": 15.0
   },
   "question": "Assess the system design: component boundaries, coupling between services, and the scalability tradeoff of the proposed architecture under enterprise load.",
   "schema_version": "1.0"

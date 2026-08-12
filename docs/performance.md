@@ -101,13 +101,18 @@ A third run, taken earlier while the machine was busy, is reported separately be
 | Cold start | 11,549 ms | 10,800 ms | 5,748 ms | reported | not gated |
 | Deadline verdict | PASS | **FAIL** | PASS | — | 10 s |
 
-**The p95 hard limit is missed in both runs — 17.8% and 24.8% over 8,000 ms — and the
-workload sits directly on the 10-second measurement deadline.** The two runs agree to within
-1.6% on p50, 2.8% on CPU-seconds and 20 KB on peak RSS, and disagree on the verdict: run A's
-worst measurement took 9,564 ms and passed, run B's took 10,246 ms and failed, which is also
-2.5% over the 10,000 ms p99 hard limit. Whether the legal-maximum workload completes is
-decided by the run, not by the input. That is a worse property than a clean failure would be,
-because it is invisible until it is not.
+**The p95 hard limit is missed in both runs — 17.8% and 24.8% over 8,000 ms.** That budget
+has not moved and is still missed; a missed budget is recorded as missed. The two runs agree
+to within 1.6% on p50, 2.8% on CPU-seconds and 20 KB on peak RSS, and disagreed on the
+deadline verdict: run A's worst measurement took 9,564 ms and passed, run B's took 10,246 ms
+and failed, which is also 2.5% over the 10,000 ms p99 hard limit. Whether the legal-maximum
+workload completed was decided by the run, not by the input. That is a worse property than a
+clean failure would be, because it is invisible until it is not — and it is what the
+deadline change below responds to.
+
+The table above records the state at the **then-declared 10-second deadline**. That is the
+measurement of record for the straddle; it is not restated, because the straddle is the
+reason the deadline moved.
 
 The latency series are taken under a longer instrumentation timeout, recorded in each run's
 `deadline.series_measured_under_seconds`: a ceiling cannot be recorded without observing past
@@ -242,6 +247,46 @@ built here. It is one comparison against one runner, not a reproducibility guara
 that `pyproject.toml` sets `readme = "README.md"`, so the README is embedded in the wheel
 metadata and editing it changes the digest — a comparison is about one tree, including its
 prose.
+
+## The measurement deadline, and why it moved
+
+`DEFAULT_TIMEOUT_SECONDS` was **10.0 s until 2026-08-12 and is 15.0 s from that date**
+(`../src/prism/limits.py`). The straddle above is the reason: at 10 s the legal maximum
+request — five candidates, four claims each, all on one subject, so all 160 cross-candidate
+pairs reach the NLI model — passed or failed depending on the run, on one idle machine with
+one input. A contract that advertises a capacity has to be able to serve it.
+
+15.0 s is the worst measured idle maximum, 10,246 ms, plus 46%. It is a bound on how long a
+caller waits before receiving a typed `TIMEOUT`, not a promise of completion: the same
+workload measured p95 14,340 ms on a busy machine, so a loaded host still times out. That is
+the deadline working, not failing.
+
+Verified after the change, adversarial workload, release profile, 160 of 160 pairs scored in
+both directions:
+
+| | Value |
+|---|---:|
+| Measurement p50 | 10,846 ms |
+| Measurement p95 | 11,652 ms |
+| Measurement p99 / worst observed | 11,877 ms |
+| Declared deadline | 15,000 ms |
+| Deadline verdict | **PASS** |
+| CPU per measurement | 24.22 s |
+| Peak RSS | 956 MB |
+
+**This verification run was not taken on an idle machine, and it is published anyway because
+the direction of the error is safe.** Its preflight p95 was 0.300 ms against the 0.110–0.150 ms
+idle range recorded above — the same ambient marker that identified the loaded outlier in the
+previous section. Ambient load inflates these figures, so a `PASS` measured under it
+understates the margin rather than flattering it. The idle figure would be nearer the
+9,421–9,985 ms p95 already recorded. A `FAIL` measured this way would have proved nothing and
+would have been re-run.
+
+**What did not move.** `MAX_CROSS_CANDIDATE_PAIRS` is still 160. The 8,000 ms p95 and
+10,000 ms p99 budgets in `../scripts/compare_benchmarks.py` are unchanged, and the
+adversarial workload still misses both. Those budgets gate the reference workload, where
+they are met with room; they were not loosened to accommodate the worst case, and the worst
+case is still recorded as missing them.
 
 ## Baseline
 
