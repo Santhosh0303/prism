@@ -495,6 +495,17 @@ def test_a_soak_on_a_loaded_machine_is_inconclusive_not_a_leak() -> None:
     assert any("ambient load" in finding for finding in findings)
 
 
+def test_a_contaminated_baseline_window_is_inconclusive_too() -> None:
+    """Measured against itself the baseline reduces to `p95 > p95 * 1.5` and can never be
+    flagged, which would leave the one window every ratio is anchored to as the only one
+    nobody checks. The reference is the median of the per-window figures for that reason."""
+    plateau = [760_000_000] * 20
+    ambient = [0.31] * 4 + [0.12] * 16
+    verdict, findings = soak_verdict(soak_samples(plateau, preflight_ms=ambient))
+    assert verdict == "INCONCLUSIVE"
+    assert any("baseline window" in finding for finding in findings)
+
+
 def test_a_withheld_permit_is_caught() -> None:
     """Capacity lost to a permit that was never released, which no RSS reading would show."""
     plateau = [760_000_000] * 20
@@ -527,6 +538,7 @@ def test_rebuilt_encoder_sessions_are_caught() -> None:
 
 LOCAL_BUILD: Final[dict[str, object]] = {
     "source_tree": "4d1f0b2",
+    "working_tree_dirty": False,
     "source_revision": "fcea87d",
     "platform": "Windows-11-10.0.26200-SP0",
     "python": "3.12.11",
@@ -537,6 +549,7 @@ LOCAL_BUILD: Final[dict[str, object]] = {
 def ci_build(**overrides: object) -> dict[str, object]:
     record: dict[str, object] = {
         "source_tree": "4d1f0b2",
+        "working_tree_dirty": False,
         # A pull_request run builds a merge commit, so the commit differs by construction.
         "source_revision": "2c91627",
         "platform": "Linux-6.11-x86_64",
@@ -580,6 +593,33 @@ def test_a_differing_commit_over_one_tree_is_not_refused() -> None:
         )
         == []
     )
+
+
+def test_a_build_from_a_dirty_tree_is_refused() -> None:
+    """uv build builds the working tree; HEAD^{tree} names what was committed. With
+    uncommitted changes the record names a source the wheel did not come from, and two such
+    records could agree on a tree while their wheels came from different code."""
+    dirty_here = dict(LOCAL_BUILD)
+    dirty_here["working_tree_dirty"] = True
+    assert any(
+        "this machine built a working tree with uncommitted changes" in finding
+        for finding in check_reproducible_build.cross_machine_findings(dirty_here, ci_build())
+    )
+    assert any(
+        "the record built a working tree with uncommitted changes" in finding
+        for finding in check_reproducible_build.cross_machine_findings(
+            LOCAL_BUILD, ci_build(working_tree_dirty=True)
+        )
+    )
+
+
+def test_a_record_that_does_not_state_its_cleanliness_is_refused() -> None:
+    """A record from before the field existed says nothing about the tree it built, and
+    silence is not the same as clean."""
+    silent = ci_build()
+    del silent["working_tree_dirty"]
+    findings = check_reproducible_build.cross_machine_findings(LOCAL_BUILD, silent)
+    assert any("uncommitted changes" in finding for finding in findings)
 
 
 def test_a_record_without_a_tree_is_refused() -> None:

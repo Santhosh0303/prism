@@ -148,7 +148,7 @@ on the machine above:
 uv run pytest tests/endurance -m "endurance and models"
 ```
 
-500 measurements of the reference workload, real inference throughout, 25.2 minutes; the
+500 measurements of the reference workload, real inference throughout, 23.8 minutes; the
 first 10 are discarded as warm-up and the remaining 490 are scored in five equal windows.
 The run writes `benchmarks/out/soak.json` and the test then reads that file back and asserts
 against what is on disk — a soak that was started, or whose record was never opened, is not
@@ -156,21 +156,26 @@ evidence.
 
 | Window | Measurements | Mean RSS | Handles | Threads | Permits free at rest | Encoder sessions | Preflight p95 | Measurement p95 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 (warm baseline) | 98 | 730.6 MB | 346 | 38.4 | 2 of 2 | 1 | 0.426 ms | 3,780 ms |
-| 2 | 98 | 731.7 MB | 344 | 37.7 | 2 of 2 | 1 | 0.327 ms | 3,209 ms |
-| 3 | 98 | 732.6 MB | 344 | 37.2 | 2 of 2 | 1 | 0.308 ms | 3,047 ms |
-| 4 | 98 | 733.6 MB | 344 | 37.2 | 2 of 2 | 1 | 0.308 ms | 3,071 ms |
-| 5 (final 20%) | 98 | 734.6 MB | 344 | 37.0 | 2 of 2 | 1 | 0.310 ms | 2,995 ms |
+| 1 (warm baseline) | 98 | 730.4 MB | 327 | 38.3 | 2 of 2 | 1 | 0.318 ms | 3,218 ms |
+| 2 | 98 | 731.5 MB | 324 | 37.6 | 2 of 2 | 1 | 0.357 ms | 2,947 ms |
+| 3 | 98 | 732.4 MB | 324 | 37.5 | 2 of 2 | 1 | 0.310 ms | 2,877 ms |
+| 4 | 98 | 733.4 MB | 324 | 37.0 | 2 of 2 | 1 | 0.309 ms | 2,946 ms |
+| 5 (final 20%) | 98 | 734.4 MB | 324 | 37.3 | 2 of 2 | 1 | 0.316 ms | 2,829 ms |
 
-**Verdict `PASS`, no findings.** The final window is 1.0055× the warm baseline on RSS,
-0.993× on handles and 0.964× on threads, against a 5% allowance. Peak RSS over the whole run
-was 735.1 MB from 20,308 samples. Every permit was back at rest in every window, no worker
+**Verdict `PASS`, no findings.** The final window is 1.0055x the warm baseline on RSS,
+0.992x on handles and 0.974x on threads, against a 5% allowance. Peak RSS over the whole run
+was 735.0 MB from 19,130 samples. Every permit was back at rest in every window, no worker
 was ever abandoned, the measurement pool never held more than one thread, and one pair of
 encoder sessions served all 500 measurements.
 
+**Two runs, and they agree.** An earlier 25.2-minute run of the same 500 measurements
+reported the same 1.0055x RSS ratio, the same 1.04 MB per window slope, and 735.1 MB peak
+against this run's 735.0 MB. The table above is the later run, taken after the ambient
+control was corrected, so the published figures come from the code that ships.
+
 **RSS did rise in every window, and that is recorded rather than rounded off.** The rise is
 1.04 MB per window, 0.55% end to end — roughly 10 KB per measurement. It sits below the 1%
-floor the slope check applies, so it is not reported as a leak, and 25 minutes cannot
+floor the slope check applies, so it is not reported as a leak, and 24 minutes cannot
 separate a drift that small from allocator behaviour. What can be said is bounded: no leak
 large enough to matter over half an hour, and nothing here rules out a slow one over days.
 Extrapolating 10 KB per measurement is arithmetic, not a measurement, and is not published
@@ -178,16 +183,20 @@ as a figure.
 
 **The ambient control.** Preflight loads no model, so its p95 cannot move because of
 anything the soak does; a moving preflight p95 means the machine moved. It is recorded per
-window, and a window more than 1.5× the baseline is discarded rather than believed. No
-window was discarded here: p95 fell from 0.426 ms to about 0.31 ms and stayed there, which
-is the process settling, not drifting. The absolute figures sit above the 0.110–0.144 ms
-idle numbers in the table above because the soak itself keeps the CPU busy for 25 minutes —
-the control watches drift across windows, not absolute idleness. Had the baseline or the
-final window been contaminated, the verdict would be `INCONCLUSIVE`; a resource slope
-measured on a loaded machine is a reading of the machine, which this project has already
-published once and does not intend to repeat.
+window, and a window more than 1.5x the **median** of those figures is discarded rather than
+believed. The median, not the baseline window's own p95: measured against itself the
+baseline reduces to `p95 > p95 * 1.5` and can never be flagged, which would leave the one
+window every ratio is anchored to as the only one nobody checks. No window was discarded
+here — the five figures span 0.309 to 0.357 ms around a 0.316 ms median. The absolute values
+sit above the 0.110–0.144 ms idle numbers in the table above because the soak itself keeps
+the CPU busy for 24 minutes; the control watches drift across windows, not absolute
+idleness. Had the baseline or the final window been contaminated, the verdict would be
+`INCONCLUSIVE` — a resource slope measured on a loaded machine is a reading of the machine,
+which this project has already published once and does not intend to repeat. What the median
+cannot catch is load present for the whole run, which moves it too; that is why the absolute
+per-window figures are recorded and not only the ratios.
 
-## Measured — cross-machine build reproducibility
+## Cross-machine build reproducibility
 
 `scripts/check_reproducible_build.py` builds twice and compares normalised wheel content.
 Two builds on one machine share a filesystem, a clock and a `uv`, so they are held constant
@@ -207,20 +216,18 @@ out, while its tree is the branch tip's whenever the base has not moved. Keying 
 commit would have refused a runner build of exactly this source — it did, on the first
 attempt, which is why the check is on the tree.
 
-Measured, for tree `ade6f985e610cfbd09e67fc3d99d1c9b7fd99519`:
-
-| | Local | CI runner |
-|---|---|---|
-| Platform | Windows 11 (10.0.26200) | Linux 6.17 (azure), glibc 2.39 |
-| Python | 3.12.10 | 3.12.3 |
-| `prism_preflight-0.1.0-py3-none-any.whl` | `sha256:a93b47bb…8790` | `sha256:a93b47bb…8790` |
-
-`verdict: PASS`, no findings: two operating systems, two Python patch releases, one wheel.
-That is the claim two builds in one temporary directory cannot support.
+Both records also state whether the working tree they built was clean, and a build from a
+dirty tree is refused: `uv build` builds the working tree while the tree hash names what was
+committed, so with uncommitted changes the record would name a source the wheel did not come
+from — and two such records could agree on a tree while their wheels came from different
+code, which is the one claim this comparison exists to make.
 
 What it does not cover: the wheel holds `src/prism` and its metadata, so this says nothing
 about the model bundle, the lock resolution on a third platform, or any artifact that is not
-built here. It is one comparison against one runner, not a reproducibility guarantee.
+built here. It is one comparison against one runner, not a reproducibility guarantee. Note
+that `pyproject.toml` sets `readme = "README.md"`, so the README is embedded in the wheel
+metadata and editing it changes the digest — a comparison is about one tree, including its
+prose.
 
 ## Baseline
 

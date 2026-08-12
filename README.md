@@ -37,9 +37,10 @@ measured. Any such number would be fabricated. Calibrating requires real pre-exi
 outputs harvested with provenance, labelled independently by a second human, with the
 manifest hash committed before any encoder run and the sealed test set scored exactly once.
 
-An endurance soak has now been run: 490 scored measurements over 25 minutes hold a resource
-plateau, recorded in [`docs/performance.md`](docs/performance.md) together with what a run
-that length cannot settle. Still not done: signed release provenance and artifact signing,
+An endurance soak has now been run: 490 scored measurements over 24 minutes hold a resource
+plateau, reproduced across two runs and recorded in
+[`docs/performance.md`](docs/performance.md) together with what a run that length cannot
+settle. Still not done: signed release provenance and artifact signing,
 and a compatibility matrix against pinned prior host releases. The regression baseline is
 recorded but `UNSIGNED`. See
 [`docs/operations.md`](docs/operations.md) for the complete list of absent controls.
