@@ -166,17 +166,24 @@ on one subject and one scope, so all 160 pairs survive E1 and every one is score
 directions: 320 NLI calls, the maximum work the contract permits. 100 preflight calls and 30
 measurements after warm-up, on AMD64 (AMD, 16 logical cores), Windows 11, Python 3.12.10.
 
-| Metric | Reference (worst of 3) | Adversarial (2 runs) | Target | Hard limit |
+| Metric | Reference (worst of 3, 2026-08-12) | Adversarial (2 runs, 2026-08-11) | Target | Hard limit |
 |---|---:|---:|---:|---:|
 | Pairs scored by NLI | 60 of 160 | 160 of 160 | — | — |
-| Preflight p95 | 0.150 ms | 0.110–0.144 ms | < 15 ms | < 50 ms |
-| Measurement p50 | 3,232 ms | 8,395–8,529 ms | — | — |
-| Measurement p95 | 3,468 ms | **9,421–9,985 ms** | < 3,500 ms | < 8,000 ms |
-| Measurement p99 | 3,579 ms | **9,564–10,246 ms** | < 9,000 ms | < 10,000 ms |
-| CPU per measurement | 6.59 s | 18.79–19.31 s | — | — |
-| Peak RSS | 750 MB | 953 MB | < 2.2 GB | < 3 GB |
-| Default report size | 3,175 bytes | 3,205 bytes | < 6 KB | < 12 KB |
-| Cold start | 5,748 ms | 10,800–11,549 ms | reported, not gated | — |
+| Preflight p95 | 0.266 ms | 0.110–0.144 ms | < 15 ms | < 50 ms |
+| Measurement p50 | 3,545 ms | 8,395–8,529 ms | — | — |
+| Measurement p95 | **3,673 ms** | **9,421–9,985 ms** | **< 3,500 ms** | < 8,000 ms |
+| Measurement p99 | 3,726 ms | **9,564–10,246 ms** | < 9,000 ms | < 10,000 ms |
+| CPU per measurement | 7.70 s | 18.79–19.31 s | — | — |
+| Peak RSS | 752 MB | 953 MB | < 2.2 GB | < 3 GB |
+| Default report size | 3,204 bytes | 3,205 bytes | < 6 KB | < 12 KB |
+| Cold start | 6,666 ms | 10,800–11,549 ms | reported, not gated | — |
+
+**The reference workload now misses its own 3,500 ms p95 target**, by 2.5% to 4.9% across
+three runs, and that is recorded as missed. It is not a code regression: the code at the
+commit the previous baseline was recorded from measures p95 6,684 ms on this same machine
+today, so the current code is roughly 46% faster than it. Preflight, which loads no model,
+rose 73% over the same period, which is what identifies the shift as environmental. See
+[`docs/performance.md`](docs/performance.md).
 
 **The adversarial workload never fits inside the 8,000 ms p95 hard limit — 18% and 25% over
 it across two runs.** That budget has not moved and is still missed. The two runs were taken

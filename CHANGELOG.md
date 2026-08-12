@@ -71,6 +71,16 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
   and does not promise completion under load, where a host still receives `TIMEOUT`.
   `MAX_CROSS_CANDIDATE_PAIRS` stays 160, and the 8,000 ms p95 and 10,000 ms p99 budgets are
   unchanged and still missed by that worst-case workload.
+- **The regression baseline is re-pinned** to `prism-0.1.0-2026-08-12`, superseding
+  `prism-0.1.0-2026-08-11`, from three consecutive release runs on a quiet machine.
+  Measurement p95 is 3,619 ms, which **misses the 3,500 ms target by 3.4% and is recorded as
+  missed**. The rise over the superseded baseline is not a code regression: the commit that
+  baseline was recorded at, `eada7c8`, measures p95 6,684 ms on the same machine against the
+  same bundle, `onnxruntime` and thread settings, so the current code is roughly 46% faster
+  than it — `eada7c8` reconfigured both tokenizers inside every encode call, fixed in
+  `501d62f`. Preflight, which loads no model, rose 73% over the same period, which is what
+  identifies the remainder as environmental. The superseded baseline does not reproduce on
+  this machine from its own commit.
 - Measurement p95 is republished from three consecutive release runs (3,154–3,468 ms). The
   previously published 4,876 ms was measured on a loaded machine.
 
