@@ -15,6 +15,9 @@
     "cold_start_ms",
     "cpu_seconds_per_measurement",
     "peak_rss_bytes",
+    "rss_sampling",
+    "deadline",
+    "pair_work",
     "default_report_bytes"
   ],
   "properties": {
@@ -47,7 +50,74 @@
       "exclusiveMinimum": 0
     },
     "cpu_seconds_per_measurement": { "type": "number", "exclusiveMinimum": 0 },
-    "peak_rss_bytes": { "type": "integer", "exclusiveMinimum": 0 },
+    "peak_rss_bytes": {
+      "description": "Maximum resident memory over the process tree, sampled continuously on a background thread. A single reading taken when the run ends is not a peak: the maximum sits inside a measurement.",
+      "type": "integer",
+      "exclusiveMinimum": 0
+    },
+    "rss_sampling": {
+      "description": "How peak_rss_bytes was obtained, so a reader can tell a sampled maximum from a final reading.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "samples", "interval_seconds", "final_rss_bytes"],
+      "properties": {
+        "method": { "type": "string", "minLength": 1 },
+        "samples": { "type": "integer", "minimum": 1 },
+        "interval_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "final_rss_bytes": {
+          "description": "The end-of-run reading the sampler replaced, over the same process tree peak_rss_bytes covers. The two differ only in when the sample was taken, never in what was counted, so the gap between them is exactly what a final reading misses.",
+          "type": "integer",
+          "exclusiveMinimum": 0
+        }
+      }
+    },
+    "deadline": {
+      "description": "The workload's declared timeout against the worst warm measurement. FAIL is a recorded result: the adversarial workload is expected to breach it on current hardware, and the number is not moved to make the verdict green.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "declared_seconds",
+        "series_measured_under_seconds",
+        "worst_observed_ms",
+        "gated_on",
+        "verdict"
+      ],
+      "properties": {
+        "declared_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "series_measured_under_seconds": {
+          "description": "Instrumentation, not a threshold. A ceiling cannot be recorded without observing past the deadline, so the series is taken under this timeout while the verdict is judged against declared_seconds.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "worst_observed_ms": { "type": "number", "minimum": 0 },
+        "gated_on": { "type": "string", "minLength": 1 },
+        "verdict": { "enum": ["PASS", "FAIL"] }
+      }
+    },
+    "pair_work": {
+      "description": "How much inference the run actually performed. pairs_total is the input shape; pairs_scored_by_nli is the work, and a pair counts as scored only when both directions were scored.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pairs_total",
+        "relevant_pairs",
+        "scope_divergent_count",
+        "contradiction_denominator",
+        "pairs_scored_by_nli",
+        "full_pair_space_asserted"
+      ],
+      "properties": {
+        "pairs_total": { "type": "integer", "minimum": 0 },
+        "relevant_pairs": { "type": "integer", "minimum": 0 },
+        "scope_divergent_count": { "type": "integer", "minimum": 0 },
+        "contradiction_denominator": { "type": "integer", "minimum": 0 },
+        "pairs_scored_by_nli": { "type": "integer", "minimum": 0 },
+        "full_pair_space_asserted": {
+          "description": "True only for the adversarial workload, where falling short of the full 160 pairs fails the run.",
+          "type": "boolean"
+        }
+      }
+    },
     "default_report_bytes": { "type": ["integer", "null"], "minimum": 0 }
   },
   "$defs": {

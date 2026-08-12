@@ -24,8 +24,25 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
   accuracy claim.
 - `models/artifacts/manifest.json` is now committed, so a fresh clone can verify a bundle it
   obtained independently.
+- The adversarial workload at `benchmarks/workloads/adversarial.json`: all five candidates on
+  one subject and one scope, so all 160 cross-candidate pairs survive E1 and every one is
+  scored in both directions. `benchmarks/run.py` asserts that and fails the run if E1 removes
+  a pair, gates the declared measurement deadline on it, and reports the pair work it
+  actually performed.
 
 ### Fixed
+
+- Peak RSS was a single `process.memory_info().rss` reading taken after the last measurement
+  returned, which is not a peak — the maximum occurs inside a measurement. It is now a
+  maximum sampled across the process tree on a background thread.
+- README and `docs/performance.md` described the reference workload as "the maximum legal
+  one … every same-scope pair scored in both directions". It submits the maximum input shape
+  and scores 60 of its 160 pairs; the published 3.5-second p95 describes that, not the
+  maximum NLI work. Both documents now carry the measured worst case: p95 9,421–9,985 ms
+  across two idle runs, 18% to 25% over the 8,000 ms hard limit, with p99 straddling the
+  10,000 ms limit and the declared 10-second deadline — one run passed it, the next missed
+  it by 2.5%. A third run under ambient load reached p95 14,340 ms and a typed `TIMEOUT`;
+  it is reported separately rather than folded into the range. No threshold was changed.
 
 - README reported 403 tests and 58 type-checked files; both predated the removal of two test
   modules and were wrong.

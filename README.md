@@ -155,25 +155,53 @@ a contradiction. The relevance floor is what stops that becoming a reported find
 
 ## Measured performance
 
-Reference workload is the maximum legal one: 5 candidates × 4 claims, every same-scope pair
-scored in both directions with no speed floor. 100 preflight calls and 30 measurements
-after warm-up, on AMD64 (AMD, 16 logical cores), Windows 11, Python 3.12.10.
+Two workloads, and the difference between them is the point. The **reference workload** is
+the declared comparable one: it submits the legal maximum *shape* — 5 candidates × 4 claims,
+160 cross-candidate pairs — but its claims are about four different subjects, so E1 drops
+100 of those pairs and 60 reach the NLI model. The **adversarial workload** puts every claim
+on one subject and one scope, so all 160 pairs survive E1 and every one is scored in both
+directions: 320 NLI calls, the maximum work the contract permits. 100 preflight calls and 30
+measurements after warm-up, on AMD64 (AMD, 16 logical cores), Windows 11, Python 3.12.10.
 
-| Metric | Measured (worst of 3) | Target | Hard limit |
-|---|---:|---:|---:|
-| Preflight p95 | 0.150 ms | < 15 ms | < 50 ms |
-| Preflight p99 | 0.228 ms | — | < 75 ms |
-| Measurement p95 | 3,468 ms | < 3,500 ms | < 8,000 ms |
-| Measurement p99 | 3,579 ms | < 9,000 ms | < 10,000 ms |
-| Peak RSS | 750 MB | < 2.2 GB | < 3 GB |
-| Default report size | 3,175 bytes | < 6 KB | < 12 KB |
-| Cold start | 5,748 ms | reported, not gated | — |
+| Metric | Reference (worst of 3) | Adversarial (2 runs) | Target | Hard limit |
+|---|---:|---:|---:|---:|
+| Pairs scored by NLI | 60 of 160 | 160 of 160 | — | — |
+| Preflight p95 | 0.150 ms | 0.110–0.144 ms | < 15 ms | < 50 ms |
+| Measurement p50 | 3,232 ms | 8,395–8,529 ms | — | — |
+| Measurement p95 | 3,468 ms | **9,421–9,985 ms** | < 3,500 ms | < 8,000 ms |
+| Measurement p99 | 3,579 ms | **9,564–10,246 ms** | < 9,000 ms | < 10,000 ms |
+| CPU per measurement | 6.59 s | 18.79–19.31 s | — | — |
+| Peak RSS | 750 MB | 953 MB | < 2.2 GB | < 3 GB |
+| Default report size | 3,175 bytes | 3,205 bytes | < 6 KB | < 12 KB |
+| Cold start | 5,748 ms | 10,800–11,549 ms | reported, not gated | — |
 
-Measurement p95 landed between 3,154 ms and 3,468 ms across the three runs — inside the
-3,500 ms target, but by less than the run-to-run spread itself, so read "meets target" as
-provisional on this hardware. A busier or slower machine will miss it. An earlier run
-published 4,876 ms; it was taken under other load and is not comparable. Full per-run
-figures are in [`docs/performance.md`](docs/performance.md). Preflight is effectively free.
+**The adversarial workload never fits inside the 8,000 ms p95 hard limit — 18% and 25% over
+it across two runs — and it sits directly on the 10-second measurement deadline.** The two
+runs were taken back to back on the same idle machine and agree to within 1.6% on p50, 2.8%
+on CPU and 20 KB on peak RSS; they disagree on the verdict. One finished its worst
+measurement in 9,564 ms and passed. The other took 10,246 ms and failed, which is also 2.5%
+over the 10,000 ms p99 hard limit. Whether the legal-maximum workload completes is decided
+by the run, not by the input.
+
+Under load it is not close. A third run taken while the machine was busy — visible in the
+preflight column, which touches no model, at 0.306 ms against 0.110–0.144 ms — measured
+p95 14,340 ms and p99 14,592 ms, and `service.measure()` returned a typed `TIMEOUT` rather
+than a report. That run is an outlier and is not folded into the range above; it is reported
+because it shows what ambient load does to a 4% margin.
+
+Nothing was adjusted to make any of this green. The limits, the deadline, and the 160-pair
+maximum are unchanged; `benchmarks/run.py` exits non-zero on the run that missed the
+deadline and zero on the one that met it. The latency series are taken under a longer
+instrumentation timeout so that a run which breaches the deadline still yields a
+distribution instead of nothing.
+
+Reference measurement p95 landed between 3,154 ms and 3,468 ms across its three runs —
+inside the 3,500 ms target, but by less than the run-to-run spread itself, so read "meets
+target" as provisional on this hardware, and read it as describing 60 pairs of inference
+rather than 160. An earlier run published 4,876 ms; it was taken under other load and is not
+comparable. Full per-run figures are in [`docs/performance.md`](docs/performance.md).
+Preflight is effectively free, and doubles as the load indicator: it is pure Python and
+loads no model, so a preflight p95 that moves has measured the machine, not the code.
 
 ## Verification
 
