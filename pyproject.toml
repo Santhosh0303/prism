@@ -105,9 +105,10 @@ ignore = [
 
 [tool.mypy]
 python_version = "3.12"
-# The gate scripts are a flat package on sys.path, not an installed one. Without this, the
-# mutation suite that proves those gates work cannot be type-checked at all.
-mypy_path = "scripts"
+# The gate scripts and the benchmark runner are flat modules on sys.path, not installed
+# packages. Without this, the mutation suite that proves those controls work cannot be
+# type-checked at all.
+mypy_path = "scripts:benchmarks"
 strict = true
 warn_unused_configs = true
 warn_unreachable = true
@@ -116,7 +117,7 @@ no_implicit_reexport = true
 show_error_codes = true
 
 [[tool.mypy.overrides]]
-module = ["onnxruntime.*", "tokenizers.*"]
+module = ["onnxruntime.*", "tokenizers.*", "psutil.*"]
 ignore_missing_imports = true
 
 # onnxruntime and tokenizers ship no type information, so every value crossing that

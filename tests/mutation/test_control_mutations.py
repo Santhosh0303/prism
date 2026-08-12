@@ -13,19 +13,31 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 from pathlib import Path
 
 import pytest
 
+from prism.canonical import canonical_digest
+from prism.contracts import (
+    MeasureReport,
+    PrismStatus,
+    ProvenanceStatus,
+    SourceDiversity,
+)
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = REPO_ROOT / "scripts"
-if str(SCRIPTS) not in sys.path:
-    sys.path.insert(0, str(SCRIPTS))
+BENCHMARKS = REPO_ROOT / "benchmarks"
+for directory in (SCRIPTS, BENCHMARKS):
+    if str(directory) not in sys.path:
+        sys.path.insert(0, str(directory))
 
 import check_links  # noqa: E402
 import check_regression_baseline  # noqa: E402
 import check_seed_lock  # noqa: E402
 import compare_benchmarks  # noqa: E402
+import run  # noqa: E402
 
 # --------------------------------------------------------------------------------------
 # documentation relations
@@ -296,3 +308,97 @@ def test_a_workload_mismatch_is_caught(tmp_path: Path) -> None:
     result = compare_benchmarks.run(candidate_path=candidate)
     assert result.verdict == "FAIL"
     assert any("workload mismatch" in finding for finding in result.findings)
+
+
+# --------------------------------------------------------------------------------------
+# benchmark runner controls
+# --------------------------------------------------------------------------------------
+
+
+def benchmark_report(**overrides: object) -> MeasureReport:
+    """A report that reached the full 160-pair space; tests vary one field at a time."""
+    base: dict[str, object] = {
+        "status": PrismStatus.OK,
+        "source_diversity": SourceDiversity.MULTI_SOURCE,
+        "provenance_status": ProvenanceStatus.DECLARED_UNVERIFIED,
+        "pairs_total": 160,
+        "relevant_pairs": 160,
+        "scope_divergent_count": 0,
+        "scope_uncertain_count": 0,
+        "contradiction_denominator": 160,
+        "pairs_scored_by_nli": 160,
+        "pairs_inferred_not_contradictory": 0,
+        "nli_coverage": 1.0,
+        "sources_distinct": 5,
+        "pair_ledger_digest": canonical_digest([]),
+    }
+    base.update(overrides)
+    return MeasureReport(**base)  # type: ignore[arg-type]
+
+
+def test_the_adversarial_assertion_accepts_the_full_pair_space() -> None:
+    assert run.full_pair_space_findings(benchmark_report()) == []
+
+
+def test_the_adversarial_assertion_rejects_the_reference_workloads_coverage() -> None:
+    """The exact input the control exists to reject.
+
+    The reference workload submits the same 5x4 shape and reaches 60 scored pairs, because
+    its claims are about four subjects and E1 correctly drops the rest. A p95 measured over
+    that is the maximum input shape, not the maximum NLI work — which is the whole reason
+    this assertion exists.
+    """
+    findings = run.full_pair_space_findings(
+        benchmark_report(
+            relevant_pairs=60,
+            contradiction_denominator=60,
+            pairs_scored_by_nli=60,
+        )
+    )
+    assert findings
+    assert any("E1 kept 60 of 160 pairs" in finding for finding in findings)
+    assert any("both directions" in finding for finding in findings)
+
+
+def test_a_pair_scored_in_one_direction_only_fails_the_assertion() -> None:
+    """NLI is not symmetric, so a one-directional pass is a different measurement."""
+    findings = run.full_pair_space_findings(benchmark_report(pairs_scored_by_nli=159))
+    assert any("159 of 160 pairs in both directions" in finding for finding in findings)
+
+
+def test_a_scope_divergent_pair_fails_the_assertion() -> None:
+    findings = run.full_pair_space_findings(
+        benchmark_report(scope_divergent_count=4, contradiction_denominator=156)
+    )
+    assert any("scope divergent" in finding for finding in findings)
+
+
+def test_the_rss_sampler_records_a_maximum_a_final_reading_would_miss() -> None:
+    """A peak that lives inside the run is the number this sampler exists to catch."""
+    with run.PeakRssSampler(interval_seconds=0.01) as sampler:
+        ballast = bytearray(256 * 1024 * 1024)
+        ballast[::4096] = b"\x01" * len(ballast[::4096])  # touch it, so it is resident
+        time.sleep(0.3)
+        while_held = sampler.tree_rss_bytes()
+        del ballast
+
+    assert sampler.samples > 1, "the sampler thread never ran"
+    assert sampler.peak_bytes >= while_held, (
+        f"peak {sampler.peak_bytes} missed the {while_held} bytes resident during the run"
+    )
+
+
+def test_a_reading_taken_beside_the_peak_can_never_exceed_it() -> None:
+    """A peak smaller than a number published next to it is not a peak.
+
+    The runner takes one reading directly, to report what the end-of-run reading it
+    replaced would have said. That reading has to go through the maximum: taken outside it,
+    it came back 4 KB above the recorded peak on a real run, and the pair contradicted
+    itself in the published record.
+    """
+    with run.PeakRssSampler(interval_seconds=0.01) as sampler:
+        ballast = bytearray(64 * 1024 * 1024)
+        final_reading = sampler.sample()
+        del ballast
+
+    assert sampler.peak_bytes >= final_reading
