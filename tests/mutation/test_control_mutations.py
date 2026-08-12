@@ -526,7 +526,8 @@ def test_rebuilt_encoder_sessions_are_caught() -> None:
 # second machine would expose.
 
 LOCAL_BUILD: Final[dict[str, object]] = {
-    "source_revision": "f97a5e1",
+    "source_tree": "4d1f0b2",
+    "source_revision": "fcea87d",
     "platform": "Windows-11-10.0.26200-SP0",
     "python": "3.12.11",
     "artifacts": {"prism_preflight-0.1.0-py3-none-any.whl": "sha256:aaaa"},
@@ -535,7 +536,9 @@ LOCAL_BUILD: Final[dict[str, object]] = {
 
 def ci_build(**overrides: object) -> dict[str, object]:
     record: dict[str, object] = {
-        "source_revision": "f97a5e1",
+        "source_tree": "4d1f0b2",
+        # A pull_request run builds a merge commit, so the commit differs by construction.
+        "source_revision": "2c91627",
         "platform": "Linux-6.11-x86_64",
         "python": "3.12.11",
         "artifacts": {"prism_preflight-0.1.0-py3-none-any.whl": "sha256:aaaa"},
@@ -557,10 +560,31 @@ def test_a_machine_dependent_artifact_is_caught() -> None:
     assert any("depends on the machine that built it" in finding for finding in findings)
 
 
-def test_comparing_two_different_commits_is_refused() -> None:
+def test_comparing_two_different_trees_is_refused() -> None:
     """Same digest, different source, is not evidence of anything — and the mismatch case
     would blame the machine for a difference that is really a difference in the code."""
     findings = check_reproducible_build.cross_machine_findings(
-        LOCAL_BUILD, ci_build(source_revision="0000000")
+        LOCAL_BUILD, ci_build(source_tree="0000000")
     )
     assert any("different source" in finding for finding in findings)
+
+
+def test_a_differing_commit_over_one_tree_is_not_refused() -> None:
+    """The exact case a commit-keyed comparison got wrong: a `pull_request` run builds the
+    merge of the branch into its base, so its commit exists on no branch and matches nothing
+    a maintainer can check out. The content is identical and the trees say so."""
+    assert check_reproducible_build.cross_machine_findings(LOCAL_BUILD, ci_build()) == []
+    assert (
+        check_reproducible_build.cross_machine_findings(
+            LOCAL_BUILD, ci_build(source_revision="a-completely-different-commit")
+        )
+        == []
+    )
+
+
+def test_a_record_without_a_tree_is_refused() -> None:
+    """An older or hand-made record cannot be silently accepted as agreement."""
+    stale = ci_build()
+    del stale["source_tree"]
+    findings = check_reproducible_build.cross_machine_findings(LOCAL_BUILD, stale)
+    assert any("does not name the source tree" in finding for finding in findings)
