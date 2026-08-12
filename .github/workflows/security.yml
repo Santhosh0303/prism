@@ -19,17 +19,17 @@ on:
     # codeql.yml already trigger this way; this file was the outlier.
     branches: [main]
   pull_request:
-    # Filtered, because a pull request that touches none of these does not change what the
-    # scan would find, and the push run above is the backstop for the merged tree.
-    paths:
-      - "uv.lock"
-      - "pyproject.toml"
-      - ".github/workflows/security.yml"
-      # The scripts this workflow executes. Without them, an edit to
-      # scripts/verify_offline.py, scripts/build_sbom.py or scripts/check_links.py does
-      # not run the job that executes it — which is how a change to the offline gate
-      # reached a green pull request without that gate ever running on it.
-      - "scripts/**"
+    # Also not path-filtered, and the filter that used to be here is the reason why. These
+    # jobs are required status checks on main, and a required check that does not run is not
+    # a skipped check -- GitHub waits for a status that will never be reported, so the pull
+    # request cannot merge at all. A filter here would therefore block every documentation
+    # or test-only change permanently.
+    #
+    # The filter it replaces listed uv.lock, pyproject.toml, this file and scripts/**. That
+    # matched the advisories job's inputs well enough, but it was already wrong for the
+    # other two: a docs-only change can break a link, and check_links.py is what would have
+    # caught it. Running unconditionally costs about a minute and removes a whole class of
+    # "the gate did not run, so the tick means nothing".
 
 permissions:
   contents: read
