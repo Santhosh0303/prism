@@ -60,6 +60,17 @@ accepts the previous declared minor or returns a typed `VERSION_MISMATCH`.
 
 ### Changed
 
+- **The measurement deadline is 15 s, raised from 10 s.** `DEFAULT_TIMEOUT_SECONDS` in
+  `src/prism/limits.py`, and the declared `timeout_seconds` in both benchmark workloads. A
+  caller that supplied no timeout previously waited up to 10 s for a report or a typed
+  `TIMEOUT`, and now waits up to 15. The reason is measured: the legal maximum request —
+  five candidates, four claims each, all on one subject, so all 160 cross-candidate pairs
+  reach the NLI model — straddled the old deadline on one idle machine, one run passing at
+  9,564 ms and the next failing at 10,246 ms. A contract that advertises a capacity has to
+  be able to serve it. 15 s is the worst measured idle maximum plus 46%; it bounds the wait
+  and does not promise completion under load, where a host still receives `TIMEOUT`.
+  `MAX_CROSS_CANDIDATE_PAIRS` stays 160, and the 8,000 ms p95 and 10,000 ms p99 budgets are
+  unchanged and still missed by that worst-case workload.
 - Measurement p95 is republished from three consecutive release runs (3,154–3,468 ms). The
   previously published 4,876 ms was measured on a loaded machine.
 

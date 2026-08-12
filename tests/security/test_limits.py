@@ -35,7 +35,7 @@ def test_limit_values_are_the_pinned_ones() -> None:
     assert limits.MAX_REGISTRY_BYTES == 256 * 1024
     assert limits.MAX_INLINE_PAIR_DETAILS == 20
     assert limits.MAX_DEFAULT_REPORT_BYTES == 12 * 1024
-    assert limits.DEFAULT_TIMEOUT_SECONDS == 10.0
+    assert limits.DEFAULT_TIMEOUT_SECONDS == 15.0
     assert limits.MAX_CONCURRENT_MEASUREMENTS == 2
     assert limits.MAX_QUEUED_MEASUREMENTS == 0
 

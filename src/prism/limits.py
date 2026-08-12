@@ -70,7 +70,23 @@ MAX_DEFAULT_REPORT_BYTES: Final[int] = 12 * 1024
 # execution
 # --------------------------------------------------------------------------------------
 
-DEFAULT_TIMEOUT_SECONDS: Final[float] = 10.0
+#: The measurement deadline: how long a caller waits before receiving a typed ``TIMEOUT``
+#: instead of a report. Raised from 10.0 on 2026-08-12, because at 10 s the contract could
+#: not keep its promise at the capacity it advertises. The legal maximum request — five
+#: candidates, four claims each, all on one subject, so all 160 cross-candidate pairs reach
+#: the NLI model — *straddled* the old deadline on the reference machine: one idle run's
+#: worst measurement took 9,564 ms and passed, the next took 10,246 ms and failed. Same
+#: machine, same input, different verdict.
+#:
+#: 15.0 is the worst measured idle maximum (10,246 ms) plus 46%. It is a bound on how long
+#: a caller waits, not a guarantee of completion: the same workload measured 14,340 ms p95
+#: on a busy machine, so a loaded host still returns ``TIMEOUT``, which is the deadline
+#: working rather than failing.
+#:
+#: What did *not* move: ``MAX_CROSS_CANDIDATE_PAIRS`` is still 160, and the 8,000 ms p95 and
+#: 10,000 ms p99 budgets in ``scripts/compare_benchmarks.py`` are unchanged and are still
+#: missed by that worst-case workload. A missed budget is recorded as missed.
+DEFAULT_TIMEOUT_SECONDS: Final[float] = 15.0
 
 #: Admission is zero-queue by design. Excess work is rejected with a
 #: typed BUSY inside the admission budget; it is never parked in a queue where it could

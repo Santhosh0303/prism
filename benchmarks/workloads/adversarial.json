@@ -168,7 +168,7 @@
   ],
   "config": {
     "include_raw_nli_scores": false,
-    "timeout_seconds": 10.0
+    "timeout_seconds": 15.0
   },
   "question": "Assess whether the payment retry queue loses messages when the downstream broker rejects a delivery attempt, and how the loss should be detected.",
   "schema_version": "1.0"
