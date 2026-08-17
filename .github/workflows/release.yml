@@ -157,7 +157,7 @@ jobs:
         # SLSA provenance, recorded against GitHub's attestation store: which workflow, at
         # which commit, on which runner, produced exactly these bytes. The verify job below
         # reads it back rather than trusting that this step ran.
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: |
             dist/*.whl
