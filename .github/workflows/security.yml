@@ -59,7 +59,7 @@ jobs:
           uv run pip-audit --strict -r requirements-audit.txt
 
       - name: OSV-Scanner
-        uses: google/osv-scanner-action/osv-scanner-action@v2.5.0
+        uses: google/osv-scanner-action/osv-scanner-action@v2.5.1
         with:
           scan-args: |-
             --lockfile=uv.lock
